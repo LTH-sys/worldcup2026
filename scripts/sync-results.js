@@ -1,18 +1,18 @@
 // scripts/sync-results.js
 // Chạy bởi GitHub Actions theo lịch (xem .github/workflows/sync-results.yml).
-// Lấy kết quả các trận đã đấu xong từ API-Football, rồi ghi vào Firebase Realtime Database
-// để app tự động hiển thị — không ai phải bấm "Nhập kết quả" tay nữa.
+// Lấy kết quả các trận đã đấu xong từ football-data.org (gói free, World Cup luôn miễn phí),
+// rồi tự ghi vào Firebase Realtime Database để app tự động hiển thị.
 
 const fs = require("fs");
 const path = require("path");
 
 const FIREBASE_DB_URL = process.env.FIREBASE_DB_URL;
-const API_FOOTBALL_KEY = process.env.API_FOOTBALL_KEY;
+const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 const DB_PATH = "worldcup2026";
-const FINISHED_STATUSES = new Set(["FT", "AET", "PEN"]);
+const FINISHED_STATUSES = new Set(["FINISHED", "AWARDED"]);
 
 if (!FIREBASE_DB_URL) { console.error("Thiếu biến môi trường FIREBASE_DB_URL"); process.exit(1); }
-if (!API_FOOTBALL_KEY) { console.error("Thiếu biến môi trường API_FOOTBALL_KEY"); process.exit(1); }
+if (!FOOTBALL_DATA_TOKEN) { console.error("Thiếu biến môi trường FOOTBALL_DATA_TOKEN"); process.exit(1); }
 
 const MATCHES = JSON.parse(fs.readFileSync(path.join(__dirname, "matches.json"), "utf-8"));
 
@@ -36,24 +36,27 @@ async function fbSet(key, value) {
 }
 
 async function fetchFixtures() {
-  const res = await fetch("https://v3.football.api-sports.io/fixtures?league=1&season=2026", {
-    headers: { "x-apisports-key": API_FOOTBALL_KEY },
+  const res = await fetch("https://api.football-data.org/v4/competitions/WC/matches?season=2026", {
+    headers: { "X-Auth-Token": FOOTBALL_DATA_TOKEN },
   });
-  if (!res.ok) throw new Error(`API-Football trả lỗi: HTTP ${res.status}`);
-  const data = await res.json();
-  if (data.errors && Object.keys(data.errors).length > 0) {
-    throw new Error(`API-Football báo lỗi: ${JSON.stringify(data.errors)}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`football-data.org trả lỗi: HTTP ${res.status} ${body}`);
   }
-  return data.response || [];
+  const data = await res.json();
+  if (data.errorCode) {
+    throw new Error(`football-data.org báo lỗi: ${data.message || JSON.stringify(data)}`);
+  }
+  return data.matches || [];
 }
 
 async function main() {
-  console.log(`Đang lấy danh sách trận từ API-Football...`);
+  console.log(`Đang lấy danh sách trận từ football-data.org...`);
   const fixtures = await fetchFixtures();
-  console.log(`Nhận được ${fixtures.length} trận từ API (mong đợi 104).`);
+  console.log(`Nhận được ${fixtures.length} trận từ API (mong đợi tối đa 104, có thể ít hơn nếu vòng loại trực tiếp chưa được thêm).`);
 
   // Sắp xếp theo thời gian thi đấu để khớp vị trí với matches.json (cũng đã theo thứ tự thời gian)
-  fixtures.sort((a, b) => a.fixture.timestamp - b.fixture.timestamp);
+  fixtures.sort((a, b) => new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime());
 
   const existingResults = (await fbGet("results")) || {};
   let updated = 0;
@@ -62,24 +65,23 @@ async function main() {
   for (let i = 0; i < n; i++) {
     const ours = MATCHES[i];
     const fx = fixtures[i];
-    const status = fx.fixture.status.short;
 
-    if (!FINISHED_STATUSES.has(status)) continue;
+    if (!FINISHED_STATUSES.has(fx.status)) continue;
     if (existingResults[ours.id]) continue; // đã có kết quả (tự động hoặc người nhập tay) thì không ghi đè
 
-    const homeGoals = fx.goals.home;
-    const awayGoals = fx.goals.away;
-    if (homeGoals === null || awayGoals === null) continue;
+    const winner = fx.score && fx.score.winner; // "HOME_TEAM" | "AWAY_TEAM" | "DRAW" | null
+    if (!winner) continue;
 
     let outcome;
-    if (homeGoals === awayGoals) outcome = "draw";
-    else if (homeGoals > awayGoals) outcome = "team1";
-    else outcome = "team2";
+    if (winner === "HOME_TEAM") outcome = "team1";
+    else if (winner === "AWAY_TEAM") outcome = "team2";
+    else outcome = "draw";
 
     existingResults[ours.id] = outcome;
     updated++;
+    const ft = fx.score && fx.score.fullTime ? fx.score.fullTime : {};
     console.log(
-      `Trận #${ours.id} [${ours.team1} vs ${ours.team2}] <-> API [${fx.teams.home.name} ${homeGoals}-${awayGoals} ${fx.teams.away.name}] => ${outcome}`
+      `Trận #${ours.id} [${ours.team1} vs ${ours.team2}] <-> API [${fx.homeTeam.name} ${ft.home}-${ft.away} ${fx.awayTeam.name}, winner=${winner}] => ${outcome}`
     );
   }
 
@@ -95,3 +97,4 @@ main().catch((err) => {
   console.error("Lỗi:", err.message);
   process.exit(1);
 });
+
