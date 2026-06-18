@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Dự đoán World Cup 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0B1F2A; --pitch:#16342B; --pitch-light:#1E4538; --pitch-lighter:#27553F;
+  --chalk:#F4F1EA; --chalk-dim:#B9C4BC; --gold:#D9A441; --gold-dim:#a9803a;
+  --mint:#6FCF97; --coral:#E2725B; --line:rgba(244,241,234,0.14);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--ink);color:var(--chalk);font-family:'Inter',sans-serif;-webkit-tap-highlight-color:transparent;}
+body{padding-bottom:40px;}
+.mono{font-family:'Roboto Mono',monospace;}
+.disp{font-family:'Teko',sans-serif;font-weight:600;letter-spacing:.02em;}
+button{font-family:inherit;}
+#app{max-width:560px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:0;z-index:30;background:var(--ink);border-bottom:1px solid var(--line);padding:14px 16px 0;}
+.topbar-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+.brand{font-size:30px;line-height:1;color:var(--chalk);}
+.brand span{color:var(--gold);}
+.player-chip{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--chalk-dim);}
+.player-chip b{color:var(--chalk);font-weight:600;}
+.player-chip button{background:none;border:1px solid var(--line);color:var(--chalk-dim);border-radius:20px;padding:4px 10px;font-size:12px;cursor:pointer;}
+.tabs{display:flex;gap:6px;margin:12px 0 10px;background:var(--pitch);border-radius:14px;padding:4px;}
+.tab-btn{flex:1;border:none;background:transparent;color:var(--chalk-dim);padding:9px 0;border-radius:11px;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s,color .15s;}
+.tab-btn.active{background:var(--gold);color:var(--ink);}
+
+/* ---------- filters ---------- */
+.filters{display:flex;gap:6px;overflow-x:auto;padding:10px 16px;border-bottom:1px solid var(--line);}
+.chip{flex:0 0 auto;border:1px solid var(--line);background:var(--pitch);color:var(--chalk-dim);border-radius:20px;padding:6px 13px;font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap;}
+.chip.active{background:var(--mint);color:var(--ink);border-color:var(--mint);font-weight:700;}
+
+/* ---------- content ---------- */
+.content{padding:12px 14px 0;flex:1;}
+.day-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 4px;cursor:pointer;border-top:1px solid var(--line);}
+.day-header:first-child{border-top:none;}
+.day-left{display:flex;align-items:baseline;gap:8px;}
+.day-date{font-size:18px;color:var(--chalk);font-weight:600;}
+.day-wd{font-size:12px;color:var(--gold);text-transform:uppercase;letter-spacing:.04em;}
+.day-count{font-size:11.5px;color:var(--chalk-dim);}
+.chevron{font-size:13px;color:var(--chalk-dim);transition:transform .15s;}
+.chevron.open{transform:rotate(90deg);}
+.day-matches{display:flex;flex-direction:column;gap:10px;padding:2px 0 12px;}
+.day-matches.collapsed{display:none;}
+
+/* ---------- ticket card ---------- */
+.ticket{position:relative;background:var(--pitch-light);border-radius:14px;overflow:hidden;border:1px solid rgba(244,241,234,.06);}
+.ticket-top{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;gap:8px;}
+.t-time{font-size:17px;font-weight:700;color:var(--chalk);}
+.t-tags{display:flex;gap:6px;align-items:center;}
+.tag{font-size:10.5px;padding:2px 8px;border-radius:10px;background:rgba(244,241,234,.08);color:var(--chalk-dim);font-weight:600;}
+.tag.gold{background:rgba(217,164,65,.18);color:var(--gold);}
+.t-venue{font-size:10.5px;color:var(--chalk-dim);max-width:130px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+.matchup{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:4px 14px 14px;gap:6px;}
+.team{display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;}
+.team.right{align-items:center;}
+.badge{width:42px;height:42px;border-radius:50%;background:var(--ink);border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:'Teko',sans-serif;font-weight:600;font-size:15px;color:var(--chalk);}
+.team-name{font-size:11.5px;color:var(--chalk-dim);max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.vs{font-family:'Teko',sans-serif;font-size:16px;color:var(--gold-dim);font-weight:600;}
+
+.perforation{position:relative;height:1px;background:repeating-linear-gradient(90deg,var(--line) 0 6px,transparent 6px 12px);margin:0 0;}
+.perforation::before,.perforation::after{content:"";position:absolute;top:-7px;width:14px;height:14px;border-radius:50%;background:var(--ink);}
+.perforation::before{left:-7px;}
+.perforation::after{right:-7px;}
+
+.dyn{padding:13px 14px 14px;}
+.pick-row{display:grid;grid-template-columns:1fr 64px 1fr;gap:6px;}
+.pick-btn{border:1.5px solid var(--line);background:rgba(244,241,234,.03);color:var(--chalk);border-radius:10px;padding:8px 4px;font-size:12px;font-weight:600;cursor:pointer;text-align:center;line-height:1.25;transition:background .12s,border-color .12s,color .12s;}
+.pick-btn .code{display:block;font-family:'Teko',sans-serif;font-size:16px;}
+.pick-btn:disabled{opacity:.35;cursor:not-allowed;}
+.pick-btn.selected{background:var(--gold);border-color:var(--gold);color:var(--ink);}
+.pick-btn.draw.selected{background:var(--chalk-dim);border-color:var(--chalk-dim);}
+.placeholder-note{font-size:11px;color:var(--chalk-dim);text-align:center;padding:6px 0 0;}
+
+.avatars{display:flex;gap:5px;flex-wrap:wrap;margin-top:11px;}
+.avt{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:1.5px solid var(--line);color:var(--chalk-dim);background:transparent;}
+.avt.picked{background:rgba(244,241,234,.10);color:var(--chalk);border-color:rgba(244,241,234,.3);}
+.avt.correct{background:var(--mint);color:var(--ink);border-color:var(--mint);}
+.avt.wrong{background:transparent;color:var(--coral);border-color:var(--coral);}
+
+.result-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);}
+.result-banner{font-size:12px;font-weight:700;color:var(--gold);}
+.result-link{font-size:11px;color:var(--chalk-dim);background:none;border:none;text-decoration:underline;cursor:pointer;padding:0;}
+.result-edit{display:grid;grid-template-columns:1fr 64px 1fr;gap:6px;margin-top:10px;}
+.result-edit .pick-btn{border-color:var(--coral);}
+.result-edit .pick-btn.selected{background:var(--coral);border-color:var(--coral);color:#fff;}
+
+.note{font-size:11px;color:var(--gold);margin-top:8px;font-style:italic;}
+
+/* ---------- login ---------- */
+.login-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;padding:30px 22px;}
+.login-title{font-size:34px;text-align:center;margin-bottom:4px;}
+.login-sub{text-align:center;color:var(--chalk-dim);font-size:13px;margin-bottom:24px;}
+.login-sub code{background:rgba(244,241,234,.1);color:var(--gold);padding:2px 6px;border-radius:5px;font-family:'Roboto Mono',monospace;font-size:12px;}
+.login-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.login-btn{display:flex;align-items:center;gap:10px;background:var(--pitch-light);border:1.5px solid var(--line);border-radius:14px;padding:14px 12px;color:var(--chalk);font-size:15px;font-weight:600;cursor:pointer;}
+.login-btn .badge{background:var(--ink);}
+.login-btn:active{border-color:var(--gold);}
+.add-player-btn{width:100%;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1.5px dashed var(--gold-dim);border-radius:14px;padding:13px;color:var(--gold);font-size:14px;font-weight:600;cursor:pointer;}
+.add-player-btn .plus{font-size:18px;line-height:1;}
+
+/* ---------- auth modal ---------- */
+.modal-backdrop{position:fixed;inset:0;background:rgba(11,31,42,.82);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
+.modal-card{position:relative;width:100%;max-width:340px;background:var(--pitch-light);border:1px solid var(--line);border-radius:16px;padding:24px 20px 20px;}
+.modal-close{position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:50%;border:none;background:rgba(244,241,234,.08);color:var(--chalk-dim);font-size:13px;cursor:pointer;}
+.modal-title{font-size:20px;font-weight:600;color:var(--chalk);margin-bottom:4px;}
+.modal-sub{font-size:12.5px;color:var(--chalk-dim);margin-bottom:14px;}
+.auth-input{width:100%;background:var(--ink);border:1.5px solid var(--line);border-radius:10px;padding:11px 12px;color:var(--chalk);font-size:14px;margin-bottom:10px;}
+.auth-input:focus{outline:none;border-color:var(--gold);}
+.auth-error{color:var(--coral);font-size:12px;margin:-2px 0 10px;}
+.auth-hint{color:var(--mint);font-size:12px;margin:-2px 0 10px;}
+.auth-submit{width:100%;background:var(--gold);color:var(--ink);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;}
+.lb-add-row{display:flex;justify-content:flex-end;margin-bottom:6px;}
+.lb-add-btn{background:none;border:1px solid var(--line);color:var(--gold);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;}
+
+/* ---------- leaderboard ---------- */
+.lb-wrap{padding:14px;}
+.lb-head{font-size:13px;color:var(--chalk-dim);margin-bottom:14px;}
+.lb-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);}
+.lb-rank{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Teko',sans-serif;font-weight:700;font-size:15px;background:rgba(244,241,234,.08);color:var(--chalk-dim);flex:0 0 auto;}
+.lb-rank.gold{background:var(--gold);color:var(--ink);}
+.lb-rank.silver{background:#C9CDD3;color:var(--ink);}
+.lb-rank.bronze{background:#C98A56;color:var(--ink);}
+.lb-mid{flex:1;min-width:0;}
+.lb-name{font-size:15px;font-weight:600;margin-bottom:5px;}
+.lb-bar-track{height:6px;background:rgba(244,241,234,.08);border-radius:4px;overflow:hidden;}
+.lb-bar-fill{height:100%;background:var(--mint);}
+.lb-stats{flex:0 0 auto;text-align:right;font-family:'Roboto Mono',monospace;}
+.lb-stats .big{font-size:16px;font-weight:700;}
+.lb-stats .small{font-size:10.5px;color:var(--chalk-dim);}
+
+.loading{flex:1;display:flex;align-items:center;justify-content:center;color:var(--chalk-dim);font-size:13px;}
+.empty-state{text-align:center;color:var(--chalk-dim);font-size:13px;padding:40px 20px;}
+
+@media (prefers-reduced-motion: reduce){ *{transition:none !important;} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const MATCHES = [{"id": 1, "date": "2026-06-12", "time": "02:00", "weekday": "Thứ Sáu", "stage": "Vòng bảng", "group": "A", "team1": "Mexico", "team2": "Nam Phi", "venue": "Estadio Azteca, Mexico City", "preset": "team1", "note": ""}, {"id": 2, "date": "2026-06-12", "time": "09:00", "weekday": "Thứ Sáu", "stage": "Vòng bảng", "group": "A", "team1": "Hàn Quốc", "team2": "Séc", "venue": "Estadio Akron, Guadalajara", "preset": "team1", "note": ""}, {"id": 3, "date": "2026-06-13", "time": "02:00", "weekday": "Thứ Bảy", "stage": "Vòng bảng", "group": "B", "team1": "Canada", "team2": "Bosnia & Herzegovina", "venue": "BMO Field, Toronto", "preset": "draw", "note": ""}, {"id": 4, "date": "2026-06-13", "time": "08:00", "weekday": "Thứ Bảy", "stage": "Vòng bảng", "group": "D", "team1": "Mỹ", "team2": "Paraguay", "venue": "SoFi Stadium, Los Angeles", "preset": "team1", "note": ""}, {"id": 5, "date": "2026-06-14", "time": "02:00", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "B", "team1": "Qatar", "team2": "Thụy Sĩ", "venue": "Levi's Stadium, San Francisco", "preset": "draw", "note": ""}, {"id": 6, "date": "2026-06-14", "time": "05:00", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "C", "team1": "Brazil", "team2": "Morocco", "venue": "MetLife Stadium, New York/New Jersey", "preset": "draw", "note": ""}, {"id": 7, "date": "2026-06-14", "time": "08:00", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "C", "team1": "Haiti", "team2": "Scotland", "venue": "Gillette Stadium, Boston", "preset": "team2", "note": ""}, {"id": 8, "date": "2026-06-14", "time": "11:00", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "D", "team1": "Australia", "team2": "Thổ Nhĩ Kỳ", "venue": "BC Place, Vancouver", "preset": "team1", "note": ""}, {"id": 9, "date": "2026-06-15", "time": "00:00", "weekday": "Thứ Hai", "stage": "Vòng bảng", "group": "E", "team1": "Đức", "team2": "Curaçao", "venue": "NRG Stadium, Houston", "preset": "team1", "note": ""}, {"id": 10, "date": "2026-06-15", "time": "03:00", "weekday": "Thứ Hai", "stage": "Vòng bảng", "group": "F", "team1": "Hà Lan", "team2": "Nhật Bản", "venue": "AT&T Stadium, Dallas", "preset": "draw", "note": ""}, {"id": 11, "date": "2026-06-15", "time": "06:00", "weekday": "Thứ Hai", "stage": "Vòng bảng", "group": "E", "team1": "Bờ Biển Ngà", "team2": "Ecuador", "venue": "Lincoln Financial Field, Philadelphia", "preset": "team1", "note": ""}, {"id": 12, "date": "2026-06-15", "time": "09:00", "weekday": "Thứ Hai", "stage": "Vòng bảng", "group": "F", "team1": "Thụy Điển", "team2": "Tunisia", "venue": "Estadio BBVA, Monterrey", "preset": "team1", "note": ""}, {"id": 13, "date": "2026-06-15", "time": "23:00", "weekday": "Thứ Hai", "stage": "Vòng bảng", "group": "H", "team1": "Tây Ban Nha", "team2": "Cabo Verde", "venue": "Mercedes-Benz Stadium, Atlanta", "preset": "draw", "note": ""}, {"id": 14, "date": "2026-06-16", "time": "02:00", "weekday": "Thứ Ba", "stage": "Vòng bảng", "group": "G", "team1": "Bỉ", "team2": "Egypt", "venue": "Lumen Field, Seattle", "preset": "draw", "note": ""}, {"id": 15, "date": "2026-06-16", "time": "05:00", "weekday": "Thứ Ba", "stage": "Vòng bảng", "group": "H", "team1": "Ả Rập Saudi", "team2": "Uruguay", "venue": "Hard Rock Stadium, Miami", "preset": "draw", "note": ""}, {"id": 16, "date": "2026-06-16", "time": "08:00", "weekday": "Thứ Ba", "stage": "Vòng bảng", "group": "G", "team1": "Iran", "team2": "New Zealand", "venue": "SoFi Stadium, Los Angeles", "preset": "draw", "note": ""}, {"id": 17, "date": "2026-06-17", "time": "02:00", "weekday": "Thứ Tư", "stage": "Vòng bảng", "group": "I", "team1": "Pháp", "team2": "Senegal", "venue": "MetLife Stadium, New York/New Jersey", "preset": "team1", "note": ""}, {"id": 18, "date": "2026-06-17", "time": "05:00", "weekday": "Thứ Tư", "stage": "Vòng bảng", "group": "I", "team1": "Iraq", "team2": "Na Uy", "venue": "Gillette Stadium, Boston", "preset": "team2", "note": ""}, {"id": 19, "date": "2026-06-17", "time": "08:00", "weekday": "Thứ Tư", "stage": "Vòng bảng", "group": "J", "team1": "Argentina", "team2": "Algeria", "venue": "Arrowhead Stadium, Kansas City", "preset": "team1", "note": ""}, {"id": 20, "date": "2026-06-17", "time": "11:00", "weekday": "Thứ Tư", "stage": "Vòng bảng", "group": "J", "team1": "Áo", "team2": "Jordan", "venue": "Levi's Stadium, San Francisco", "preset": null, "note": ""}, {"id": 21, "date": "2026-06-18", "time": "00:00", "weekday": "Thứ Năm", "stage": "Vòng bảng", "group": "K", "team1": "Portugal", "team2": "CHDC Congo", "venue": "NRG Stadium, Houston", "preset": null, "note": ""}, {"id": 22, "date": "2026-06-18", "time": "03:00", "weekday": "Thứ Năm", "stage": "Vòng bảng", "group": "L", "team1": "Anh", "team2": "Croatia", "venue": "AT&T Stadium, Dallas", "preset": "team1", "note": ""}, {"id": 23, "date": "2026-06-18", "time": "06:00", "weekday": "Thứ Năm", "stage": "Vòng bảng", "group": "L", "team1": "Ghana", "team2": "Panama", "venue": "BMO Field, Toronto", "preset": null, "note": ""}, {"id": 24, "date": "2026-06-18", "time": "09:00", "weekday": "Thứ Năm", "stage": "Vòng bảng", "group": "K", "team1": "Uzbekistan", "team2": "Colombia", "venue": "Estadio Azteca, Mexico City", "preset": null, "note": ""}, {"id": 25, "date": "2026-06-18", "time": "23:00", "weekday": "Thứ Năm", "stage": "Vòng bảng", "group": "A", "team1": "Séc", "team2": "Nam Phi", "venue": "Mercedes-Benz Stadium, Atlanta", "preset": null, "note": ""}, {"id": 26, "date": "2026-06-19", "time": "02:00", "weekday": "Thứ Sáu", "stage": "Vòng bảng", "group": "B", "team1": "Thụy Sĩ", "team2": "Bosnia & Herzegovina", "venue": "SoFi Stadium, Los Angeles", "preset": null, "note": ""}, {"id": 27, "date": "2026-06-19", "time": "05:00", "weekday": "Thứ Sáu", "stage": "Vòng bảng", "group": "B", "team1": "Canada", "team2": "Qatar", "venue": "BC Place, Vancouver", "preset": null, "note": ""}, {"id": 28, "date": "2026-06-19", "time": "08:00", "weekday": "Thứ Sáu", "stage": "Vòng bảng", "group": "A", "team1": "Mexico", "team2": "Hàn Quốc", "venue": "Estadio Akron, Guadalajara", "preset": null, "note": ""}, {"id": 29, "date": "2026-06-19", "time": "11:00", "weekday": "Thứ Sáu", "stage": "Vòng bảng", "group": "D", "team1": "Thổ Nhĩ Kỳ", "team2": "Paraguay", "venue": "Levi's Stadium, San Francisco", "preset": null, "note": ""}, {"id": 30, "date": "2026-06-20", "time": "02:00", "weekday": "Thứ Bảy", "stage": "Vòng bảng", "group": "D", "team1": "Mỹ", "team2": "Australia", "venue": "Lumen Field, Seattle", "preset": null, "note": ""}, {"id": 31, "date": "2026-06-20", "time": "05:00", "weekday": "Thứ Bảy", "stage": "Vòng bảng", "group": "C", "team1": "Scotland", "team2": "Morocco", "venue": "Gillette Stadium, Boston", "preset": null, "note": ""}, {"id": 32, "date": "2026-06-20", "time": "07:30", "weekday": "Thứ Bảy", "stage": "Vòng bảng", "group": "C", "team1": "Brazil", "team2": "Haiti", "venue": "Lincoln Financial Field, Philadelphia", "preset": null, "note": ""}, {"id": 33, "date": "2026-06-21", "time": "00:00", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "F", "team1": "Hà Lan", "team2": "Thụy Điển", "venue": "NRG Stadium, Houston", "preset": null, "note": ""}, {"id": 34, "date": "2026-06-21", "time": "03:00", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "E", "team1": "Đức", "team2": "Bờ Biển Ngà", "venue": "BMO Field, Toronto", "preset": null, "note": ""}, {"id": 35, "date": "2026-06-21", "time": "07:00", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "E", "team1": "Ecuador", "team2": "Curaçao", "venue": "Arrowhead Stadium, Kansas City", "preset": null, "note": ""}, {"id": 36, "date": "2026-06-21", "time": "11:00", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "F", "team1": "Tunisia", "team2": "Nhật Bản", "venue": "Estadio BBVA, Monterrey", "preset": null, "note": "Trận thứ 1.000 lịch sử World Cup"}, {"id": 37, "date": "2026-06-21", "time": "23:00", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "H", "team1": "Tây Ban Nha", "team2": "Ả Rập Saudi", "venue": "Mercedes-Benz Stadium, Atlanta", "preset": null, "note": ""}, {"id": 38, "date": "2026-06-22", "time": "02:00", "weekday": "Thứ Hai", "stage": "Vòng bảng", "group": "G", "team1": "Bỉ", "team2": "Iran", "venue": "SoFi Stadium, Los Angeles", "preset": null, "note": ""}, {"id": 39, "date": "2026-06-22", "time": "05:00", "weekday": "Thứ Hai", "stage": "Vòng bảng", "group": "H", "team1": "Uruguay", "team2": "Cabo Verde", "venue": "Hard Rock Stadium, Miami", "preset": null, "note": ""}, {"id": 40, "date": "2026-06-22", "time": "08:00", "weekday": "Thứ Hai", "stage": "Vòng bảng", "group": "G", "team1": "New Zealand", "team2": "Egypt", "venue": "BC Place, Vancouver", "preset": null, "note": ""}, {"id": 41, "date": "2026-06-23", "time": "00:00", "weekday": "Thứ Ba", "stage": "Vòng bảng", "group": "J", "team1": "Argentina", "team2": "Áo", "venue": "AT&T Stadium, Dallas", "preset": null, "note": ""}, {"id": 42, "date": "2026-06-23", "time": "04:00", "weekday": "Thứ Ba", "stage": "Vòng bảng", "group": "I", "team1": "Pháp", "team2": "Iraq", "venue": "Lincoln Financial Field, Philadelphia", "preset": null, "note": ""}, {"id": 43, "date": "2026-06-23", "time": "07:00", "weekday": "Thứ Ba", "stage": "Vòng bảng", "group": "I", "team1": "Na Uy", "team2": "Senegal", "venue": "MetLife Stadium, New York/New Jersey", "preset": null, "note": ""}, {"id": 44, "date": "2026-06-23", "time": "10:00", "weekday": "Thứ Ba", "stage": "Vòng bảng", "group": "J", "team1": "Jordan", "team2": "Algeria", "venue": "Levi's Stadium, San Francisco", "preset": null, "note": ""}, {"id": 45, "date": "2026-06-24", "time": "00:00", "weekday": "Thứ Tư", "stage": "Vòng bảng", "group": "K", "team1": "Portugal", "team2": "Uzbekistan", "venue": "NRG Stadium, Houston", "preset": null, "note": ""}, {"id": 46, "date": "2026-06-24", "time": "03:00", "weekday": "Thứ Tư", "stage": "Vòng bảng", "group": "L", "team1": "Anh", "team2": "Ghana", "venue": "Gillette Stadium, Boston", "preset": null, "note": ""}, {"id": 47, "date": "2026-06-24", "time": "06:00", "weekday": "Thứ Tư", "stage": "Vòng bảng", "group": "L", "team1": "Panama", "team2": "Croatia", "venue": "BMO Field, Toronto", "preset": null, "note": ""}, {"id": 48, "date": "2026-06-24", "time": "09:00", "weekday": "Thứ Tư", "stage": "Vòng bảng", "group": "K", "team1": "Colombia", "team2": "CHDC Congo", "venue": "Estadio Akron, Guadalajara", "preset": null, "note": ""}, {"id": 49, "date": "2026-06-25", "time": "02:00", "weekday": "Thứ Năm", "stage": "Vòng bảng", "group": "B", "team1": "Thụy Sĩ", "team2": "Canada", "venue": "BC Place, Vancouver", "preset": null, "note": ""}, {"id": 50, "date": "2026-06-25", "time": "02:00", "weekday": "Thứ Năm", "stage": "Vòng bảng", "group": "B", "team1": "Bosnia & Herzegovina", "team2": "Qatar", "venue": "Lumen Field, Seattle", "preset": null, "note": ""}, {"id": 51, "date": "2026-06-25", "time": "05:00", "weekday": "Thứ Năm", "stage": "Vòng bảng", "group": "C", "team1": "Scotland", "team2": "Brazil", "venue": "Hard Rock Stadium, Miami", "preset": null, "note": ""}, {"id": 52, "date": "2026-06-25", "time": "05:00", "weekday": "Thứ Năm", "stage": "Vòng bảng", "group": "C", "team1": "Morocco", "team2": "Haiti", "venue": "Mercedes-Benz Stadium, Atlanta", "preset": null, "note": ""}, {"id": 53, "date": "2026-06-25", "time": "08:00", "weekday": "Thứ Năm", "stage": "Vòng bảng", "group": "A", "team1": "Séc", "team2": "Mexico", "venue": "Estadio Azteca, Mexico City", "preset": null, "note": ""}, {"id": 54, "date": "2026-06-25", "time": "08:00", "weekday": "Thứ Năm", "stage": "Vòng bảng", "group": "A", "team1": "Nam Phi", "team2": "Hàn Quốc", "venue": "Estadio BBVA, Monterrey", "preset": null, "note": ""}, {"id": 55, "date": "2026-06-26", "time": "03:00", "weekday": "Thứ Sáu", "stage": "Vòng bảng", "group": "E", "team1": "Curaçao", "team2": "Bờ Biển Ngà", "venue": "Lincoln Financial Field, Philadelphia", "preset": null, "note": ""}, {"id": 56, "date": "2026-06-26", "time": "03:00", "weekday": "Thứ Sáu", "stage": "Vòng bảng", "group": "E", "team1": "Ecuador", "team2": "Đức", "venue": "MetLife Stadium, New York/New Jersey", "preset": null, "note": ""}, {"id": 57, "date": "2026-06-26", "time": "06:00", "weekday": "Thứ Sáu", "stage": "Vòng bảng", "group": "F", "team1": "Nhật Bản", "team2": "Thụy Điển", "venue": "AT&T Stadium, Dallas", "preset": null, "note": ""}, {"id": 58, "date": "2026-06-26", "time": "06:00", "weekday": "Thứ Sáu", "stage": "Vòng bảng", "group": "F", "team1": "Tunisia", "team2": "Hà Lan", "venue": "Arrowhead Stadium, Kansas City", "preset": null, "note": ""}, {"id": 59, "date": "2026-06-26", "time": "09:00", "weekday": "Thứ Sáu", "stage": "Vòng bảng", "group": "D", "team1": "Thổ Nhĩ Kỳ", "team2": "Mỹ", "venue": "SoFi Stadium, Los Angeles", "preset": null, "note": ""}, {"id": 60, "date": "2026-06-26", "time": "09:00", "weekday": "Thứ Sáu", "stage": "Vòng bảng", "group": "D", "team1": "Paraguay", "team2": "Australia", "venue": "Levi's Stadium, San Francisco", "preset": null, "note": ""}, {"id": 61, "date": "2026-06-27", "time": "02:00", "weekday": "Thứ Bảy", "stage": "Vòng bảng", "group": "I", "team1": "Na Uy", "team2": "Pháp", "venue": "Gillette Stadium, Boston", "preset": null, "note": ""}, {"id": 62, "date": "2026-06-27", "time": "02:00", "weekday": "Thứ Bảy", "stage": "Vòng bảng", "group": "I", "team1": "Senegal", "team2": "Iraq", "venue": "BMO Field, Toronto", "preset": null, "note": ""}, {"id": 63, "date": "2026-06-27", "time": "07:00", "weekday": "Thứ Bảy", "stage": "Vòng bảng", "group": "H", "team1": "Cabo Verde", "team2": "Ả Rập Saudi", "venue": "NRG Stadium, Houston", "preset": null, "note": ""}, {"id": 64, "date": "2026-06-27", "time": "07:00", "weekday": "Thứ Bảy", "stage": "Vòng bảng", "group": "H", "team1": "Uruguay", "team2": "Tây Ban Nha", "venue": "Estadio Akron, Guadalajara", "preset": null, "note": ""}, {"id": 65, "date": "2026-06-27", "time": "10:00", "weekday": "Thứ Bảy", "stage": "Vòng bảng", "group": "G", "team1": "Egypt", "team2": "Iran", "venue": "Lumen Field, Seattle", "preset": null, "note": ""}, {"id": 66, "date": "2026-06-27", "time": "10:00", "weekday": "Thứ Bảy", "stage": "Vòng bảng", "group": "G", "team1": "New Zealand", "team2": "Bỉ", "venue": "BC Place, Vancouver", "preset": null, "note": ""}, {"id": 67, "date": "2026-06-28", "time": "04:00", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "L", "team1": "Panama", "team2": "Anh", "venue": "MetLife Stadium, New York/New Jersey", "preset": null, "note": ""}, {"id": 68, "date": "2026-06-28", "time": "04:00", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "L", "team1": "Croatia", "team2": "Ghana", "venue": "Lincoln Financial Field, Philadelphia", "preset": null, "note": ""}, {"id": 69, "date": "2026-06-28", "time": "06:30", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "K", "team1": "Colombia", "team2": "Portugal", "venue": "Hard Rock Stadium, Miami", "preset": null, "note": ""}, {"id": 70, "date": "2026-06-28", "time": "06:30", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "K", "team1": "CHDC Congo", "team2": "Uzbekistan", "venue": "Mercedes-Benz Stadium, Atlanta", "preset": null, "note": ""}, {"id": 71, "date": "2026-06-28", "time": "09:00", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "J", "team1": "Algeria", "team2": "Áo", "venue": "Arrowhead Stadium, Kansas City", "preset": null, "note": ""}, {"id": 72, "date": "2026-06-28", "time": "09:00", "weekday": "Chủ Nhật", "stage": "Vòng bảng", "group": "J", "team1": "Jordan", "team2": "Argentina", "venue": "AT&T Stadium, Dallas", "preset": null, "note": ""}, {"id": 73, "date": "2026-06-29", "time": "02:00", "weekday": "Thứ Hai", "stage": "Vòng 32", "group": "", "team1": "Nhì bảng A", "team2": "Nhì bảng B", "venue": "SoFi Stadium, Los Angeles", "preset": null, "note": ""}, {"id": 74, "date": "2026-06-30", "time": "00:00", "weekday": "Thứ Ba", "stage": "Vòng 32", "group": "", "team1": "Nhất bảng C", "team2": "Nhì bảng F", "venue": "NRG Stadium, Houston", "preset": null, "note": ""}, {"id": 75, "date": "2026-06-30", "time": "03:30", "weekday": "Thứ Ba", "stage": "Vòng 32", "group": "", "team1": "Nhất bảng E", "team2": "Hạng 3 xuất sắc (A/B/C/D/F)", "venue": "Gillette Stadium, Boston", "preset": null, "note": ""}, {"id": 76, "date": "2026-06-30", "time": "08:00", "weekday": "Thứ Ba", "stage": "Vòng 32", "group": "", "team1": "Nhất bảng F", "team2": "Nhì bảng C", "venue": "Estadio BBVA, Monterrey", "preset": null, "note": ""}, {"id": 77, "date": "2026-07-01", "time": "00:00", "weekday": "Thứ Tư", "stage": "Vòng 32", "group": "", "team1": "Nhì bảng E", "team2": "Nhì bảng I", "venue": "AT&T Stadium, Dallas", "preset": null, "note": ""}, {"id": 78, "date": "2026-07-01", "time": "04:00", "weekday": "Thứ Tư", "stage": "Vòng 32", "group": "", "team1": "Nhất bảng I", "team2": "Hạng 3 xuất sắc (C/D/F/G/H)", "venue": "MetLife Stadium, New York/New Jersey", "preset": null, "note": ""}, {"id": 79, "date": "2026-07-01", "time": "08:00", "weekday": "Thứ Tư", "stage": "Vòng 32", "group": "", "team1": "Nhất bảng A", "team2": "Hạng 3 xuất sắc (C/E/F/H/I)", "venue": "Estadio Azteca, Mexico City", "preset": null, "note": ""}, {"id": 80, "date": "2026-07-01", "time": "23:00", "weekday": "Thứ Tư", "stage": "Vòng 32", "group": "", "team1": "Nhất bảng L", "team2": "Hạng 3 xuất sắc (E/H/I/J/K)", "venue": "Mercedes-Benz Stadium, Atlanta", "preset": null, "note": ""}, {"id": 81, "date": "2026-07-02", "time": "03:00", "weekday": "Thứ Năm", "stage": "Vòng 32", "group": "", "team1": "Nhất bảng G", "team2": "Hạng 3 xuất sắc (A/E/H/I/J)", "venue": "Lumen Field, Seattle", "preset": null, "note": ""}, {"id": 82, "date": "2026-07-02", "time": "07:00", "weekday": "Thứ Năm", "stage": "Vòng 32", "group": "", "team1": "Nhất bảng D", "team2": "Hạng 3 xuất sắc (B/E/F/I/J)", "venue": "Levi's Stadium, San Francisco", "preset": null, "note": ""}, {"id": 83, "date": "2026-07-03", "time": "02:00", "weekday": "Thứ Sáu", "stage": "Vòng 32", "group": "", "team1": "Nhất bảng H", "team2": "Nhì bảng J", "venue": "SoFi Stadium, Los Angeles", "preset": null, "note": ""}, {"id": 84, "date": "2026-07-03", "time": "06:00", "weekday": "Thứ Sáu", "stage": "Vòng 32", "group": "", "team1": "Nhì bảng K", "team2": "Nhì bảng L", "venue": "BMO Field, Toronto", "preset": null, "note": ""}, {"id": 85, "date": "2026-07-03", "time": "10:00", "weekday": "Thứ Sáu", "stage": "Vòng 32", "group": "", "team1": "Nhất bảng B", "team2": "Hạng 3 xuất sắc (E/F/G/I/J)", "venue": "BC Place, Vancouver", "preset": null, "note": ""}, {"id": 86, "date": "2026-07-04", "time": "01:00", "weekday": "Thứ Bảy", "stage": "Vòng 32", "group": "", "team1": "Nhì bảng D", "team2": "Nhì bảng G", "venue": "AT&T Stadium, Dallas", "preset": null, "note": ""}, {"id": 87, "date": "2026-07-04", "time": "05:00", "weekday": "Thứ Bảy", "stage": "Vòng 32", "group": "", "team1": "Nhất bảng J", "team2": "Nhì bảng H", "venue": "Hard Rock Stadium, Miami", "preset": null, "note": ""}, {"id": 88, "date": "2026-07-04", "time": "08:30", "weekday": "Thứ Bảy", "stage": "Vòng 32", "group": "", "team1": "Nhất bảng K", "team2": "Hạng 3 xuất sắc (D/E/I/J/L)", "venue": "Arrowhead Stadium, Kansas City", "preset": null, "note": ""}, {"id": 89, "date": "2026-07-05", "time": "00:00", "weekday": "Chủ Nhật", "stage": "Vòng 16", "group": "", "team1": "Thắng trận M73", "team2": "Thắng trận M75", "venue": "NRG Stadium, Houston", "preset": null, "note": ""}, {"id": 90, "date": "2026-07-05", "time": "04:00", "weekday": "Chủ Nhật", "stage": "Vòng 16", "group": "", "team1": "Thắng trận M74", "team2": "Thắng trận M77", "venue": "Lincoln Financial Field, Philadelphia", "preset": null, "note": ""}, {"id": 91, "date": "2026-07-06", "time": "03:00", "weekday": "Thứ Hai", "stage": "Vòng 16", "group": "", "team1": "Thắng trận M76", "team2": "Thắng trận M78", "venue": "MetLife Stadium, New York/New Jersey", "preset": null, "note": ""}, {"id": 92, "date": "2026-07-06", "time": "07:00", "weekday": "Thứ Hai", "stage": "Vòng 16", "group": "", "team1": "Thắng trận M79", "team2": "Thắng trận M80", "venue": "Estadio Azteca, Mexico City", "preset": null, "note": ""}, {"id": 93, "date": "2026-07-07", "time": "02:00", "weekday": "Thứ Ba", "stage": "Vòng 16", "group": "", "team1": "Thắng trận M83", "team2": "Thắng trận M84", "venue": "AT&T Stadium, Dallas", "preset": null, "note": ""}, {"id": 94, "date": "2026-07-07", "time": "07:00", "weekday": "Thứ Ba", "stage": "Vòng 16", "group": "", "team1": "Thắng trận M81", "team2": "Thắng trận M82", "venue": "Lumen Field, Seattle", "preset": null, "note": ""}, {"id": 95, "date": "2026-07-07", "time": "23:00", "weekday": "Thứ Ba", "stage": "Vòng 16", "group": "", "team1": "Thắng trận M86", "team2": "Thắng trận M88", "venue": "Mercedes-Benz Stadium, Atlanta", "preset": null, "note": ""}, {"id": 96, "date": "2026-07-08", "time": "03:00", "weekday": "Thứ Tư", "stage": "Vòng 16", "group": "", "team1": "Thắng trận M85", "team2": "Thắng trận M87", "venue": "BC Place, Vancouver", "preset": null, "note": ""}, {"id": 97, "date": "2026-07-10", "time": "03:00", "weekday": "Thứ Sáu", "stage": "Tứ kết", "group": "", "team1": "Thắng trận M89", "team2": "Thắng trận M90", "venue": "Gillette Stadium, Boston", "preset": null, "note": ""}, {"id": 98, "date": "2026-07-11", "time": "02:00", "weekday": "Thứ Bảy", "stage": "Tứ kết", "group": "", "team1": "Thắng trận M93", "team2": "Thắng trận M94", "venue": "SoFi Stadium, Los Angeles", "preset": null, "note": ""}, {"id": 99, "date": "2026-07-12", "time": "04:00", "weekday": "Chủ Nhật", "stage": "Tứ kết", "group": "", "team1": "Thắng trận M91", "team2": "Thắng trận M92", "venue": "Hard Rock Stadium, Miami", "preset": null, "note": ""}, {"id": 100, "date": "2026-07-12", "time": "08:00", "weekday": "Chủ Nhật", "stage": "Tứ kết", "group": "", "team1": "Thắng trận M95", "team2": "Thắng trận M96", "venue": "Arrowhead Stadium, Kansas City", "preset": null, "note": ""}, {"id": 101, "date": "2026-07-15", "time": "02:00", "weekday": "Thứ Tư", "stage": "Bán kết", "group": "", "team1": "Thắng trận M97", "team2": "Thắng trận M98", "venue": "AT&T Stadium, Dallas", "preset": null, "note": ""}, {"id": 102, "date": "2026-07-16", "time": "02:00", "weekday": "Thứ Năm", "stage": "Bán kết", "group": "", "team1": "Thắng trận M99", "team2": "Thắng trận M100", "venue": "Mercedes-Benz Stadium, Atlanta", "preset": null, "note": ""}, {"id": 103, "date": "2026-07-19", "time": "04:00", "weekday": "Chủ Nhật", "stage": "Tranh hạng Ba", "group": "", "team1": "Thua trận M101", "team2": "Thua trận M102", "venue": "Hard Rock Stadium, Miami", "preset": null, "note": ""}, {"id": 104, "date": "2026-07-20", "time": "02:00", "weekday": "Thứ Hai", "stage": "Chung kết", "group": "", "team1": "Thắng trận M101", "team2": "Thắng trận M102", "venue": "MetLife Stadium, New York/New Jersey", "preset": null, "note": "Lễ giữa giờ có Shakira, Madonna, BTS"}];
+const DEFAULT_PLAYERS = ["Tùng", "Hữu", "Hùng", "Dương", "Đạt", "Thông", "Sang", "Thành"];
+
+async function hashPassword(pw){
+  const str = String(pw);
+  try{
+    const enc = new TextEncoder().encode(str);
+    const buf = await crypto.subtle.digest('SHA-256', enc);
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }catch(e){
+    // fallback simple hash if Web Crypto is unavailable in this environment
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i=0;i<str.length;i++){
+      const ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = (h1 ^ (h1>>>16)) >>> 0; h2 = (h2 ^ (h2>>>16)) >>> 0;
+    return h1.toString(16) + h2.toString(16);
+  }
+}
+
+const TEAM_CODE = {
+"Mexico":"MEX","Nam Phi":"RSA","Hàn Quốc":"KOR","Séc":"CZE","Canada":"CAN",
+"Bosnia & Herzegovina":"BIH","Mỹ":"USA","Paraguay":"PAR","Qatar":"QAT","Thụy Sĩ":"SUI",
+"Brazil":"BRA","Morocco":"MAR","Haiti":"HAI","Scotland":"SCO","Australia":"AUS",
+"Thổ Nhĩ Kỳ":"TUR","Đức":"GER","Curaçao":"CUW","Hà Lan":"NED","Nhật Bản":"JPN",
+"Bờ Biển Ngà":"CIV","Ecuador":"ECU","Thụy Điển":"SWE","Tunisia":"TUN","Tây Ban Nha":"ESP",
+"Cabo Verde":"CPV","Bỉ":"BEL","Egypt":"EGY","Ả Rập Saudi":"KSA","Uruguay":"URU",
+"Iran":"IRN","New Zealand":"NZL","Pháp":"FRA","Senegal":"SEN","Iraq":"IRQ",
+"Na Uy":"NOR","Argentina":"ARG","Algeria":"ALG","Áo":"AUT","Jordan":"JOR",
+"Portugal":"POR","CHDC Congo":"COD","Anh":"ENG","Croatia":"CRO","Ghana":"GHA",
+"Panama":"PAN","Uzbekistan":"UZB","Colombia":"COL"
+};
+function shortCode(name){
+  if (TEAM_CODE[name]) return TEAM_CODE[name];
+  return "?";
+}
+function isPlaceholder(name){
+  return /Nhất bảng|Nhì bảng|Hạng 3|Thắng trận|Thua trận/.test(name);
+}
+function initials(name){
+  return name.slice(0,2).toUpperCase();
+}
+
+let state = {
+  loaded:false, currentPlayer:null, predictions:{}, results:{},
+  players:[], playerAuth:{},
+  tab:'matches', filter:'upcoming',
+  openDays:new Set(), editingResult:new Set(),
+  authModal:null, authError:'', configError:false,
+};
+
+// ====== CẤU HÌNH FIREBASE — DÁN LINK REALTIME DATABASE CỦA BẠN VÀO DÒNG DƯỚI ======
+// Ví dụ: "https://wc2026-dudoan-default-rtdb.asia-southeast1.firebasedatabase.app"
+const FIREBASE_DB_URL = "https://wc2026-vuive-default-rtdb.asia-southeast1.firebasedatabase.app/";
+const DB_PATH = "worldcup2026";
+// ===================================================================================
+
+function firebaseConfigured(){
+  return FIREBASE_DB_URL && FIREBASE_DB_URL.indexOf("FIREBASE_DATABASE_URL_HERE") === -1;
+}
+
+async function fbGet(key){
+  try{
+    const url = `${FIREBASE_DB_URL.replace(/\/$/,'')}/${DB_PATH}/${key}.json`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("HTTP "+res.status);
+    return await res.json();
+  }catch(e){ console.error("fbGet failed:", key, e); return null; }
+}
+async function fbSet(key, value){
+  try{
+    const url = `${FIREBASE_DB_URL.replace(/\/$/,'')}/${DB_PATH}/${key}.json`;
+    const res = await fetch(url, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(value) });
+    if (!res.ok) throw new Error("HTTP "+res.status);
+    return true;
+  }catch(e){ console.error("fbSet failed:", key, e); return false; }
+}
+
+async function init(){
+  if (!firebaseConfigured()){
+    state.loaded = true;
+    state.configError = true;
+    render();
+    return;
+  }
+  const [pred, res, playersRaw, authRaw] = await Promise.all([
+    fbGet('predictions'), fbGet('results'), fbGet('players'), fbGet('playerAuth')
+  ]);
+  state.predictions = pred || {};
+  state.results = res || {};
+  state.currentPlayer = localStorage.getItem('currentPlayer') || null;
+  if (playersRaw){
+    state.players = playersRaw;
+  } else {
+    state.players = DEFAULT_PLAYERS.slice();
+    await fbSet('players', state.players);
+  }
+  state.playerAuth = authRaw || {};
+  state.loaded = true;
+  const todayStr = vnToday();
+  const upcomingDay = MATCHES.find(m=>m.date>=todayStr);
+  if (upcomingDay) state.openDays.add(upcomingDay.date);
+  render();
+}
+
+function vnToday(){
+  try{ return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Ho_Chi_Minh'}); }
+  catch(e){ return new Date().toISOString().slice(0,10); }
+}
+
+function getActualResult(m){
+  return state.results[m.id] || m.preset || null;
+}
+
+function loginAs(name){
+  state.currentPlayer = name;
+  try{ localStorage.setItem('currentPlayer', name); }catch(e){}
+  render();
+}
+function logout(){
+  state.currentPlayer = null;
+  try{ localStorage.removeItem('currentPlayer'); }catch(e){}
+  render();
+}
+
+function openLoginModal(name){
+  state.authModal = {mode:'login', name};
+  state.authError = '';
+  render();
+}
+function openCreateModal(){
+  state.authModal = {mode:'create'};
+  state.authError = '';
+  render();
+}
+function closeAuthModal(){
+  state.authModal = null;
+  state.authError = '';
+  render();
+}
+
+async function doLogin(name, password){
+  if (!password){ state.authError = 'Vui lòng nhập mật khẩu.'; render(); return; }
+  const latest = await fbGet('playerAuth');
+  state.playerAuth = latest || {};
+  const hash = await hashPassword(password);
+  if (!state.playerAuth[name]){
+    state.playerAuth[name] = hash;
+    await fbSet('playerAuth', state.playerAuth);
+    state.authModal = null; state.authError = '';
+    loginAs(name);
+    return;
+  }
+  if (state.playerAuth[name] === hash){
+    state.authModal = null; state.authError = '';
+    loginAs(name);
+    return;
+  }
+  state.authError = 'Sai mật khẩu, thử lại.';
+  render();
+}
+function onLoginSubmit(){
+  const pw = document.getElementById('auth-pw').value;
+  doLogin(state.authModal.name, pw);
+}
+
+async function doCreate(name, pw, pw2){
+  name = (name||'').trim();
+  if (!name){ state.authError = 'Vui lòng nhập tên của bạn.'; render(); return; }
+  if (pw.length < 4){ state.authError = 'Mật khẩu cần ít nhất 4 ký tự.'; render(); return; }
+  if (pw !== pw2){ state.authError = 'Hai mật khẩu không khớp.'; render(); return; }
+  const latestPlayers = await fbGet('players');
+  state.players = latestPlayers || state.players;
+  if (state.players.some(p=>p.toLowerCase()===name.toLowerCase())){
+    state.authError = 'Tên này đã có trong danh sách — hãy đăng nhập vào tên đó thay vì tạo mới.';
+    render(); return;
+  }
+  state.players.push(name);
+  await fbSet('players', state.players);
+  const latestAuth = await fbGet('playerAuth');
+  state.playerAuth = latestAuth || {};
+  state.playerAuth[name] = await hashPassword(pw);
+  await fbSet('playerAuth', state.playerAuth);
+  const shouldLogin = !state.currentPlayer;
+  state.authModal = null; state.authError = '';
+  if (shouldLogin){ loginAs(name); }
+  else { render(); }
+}
+function onCreateSubmit(){
+  const name = document.getElementById('auth-name').value;
+  const pw = document.getElementById('auth-pw').value;
+  const pw2 = document.getElementById('auth-pw2').value;
+  doCreate(name, pw, pw2);
+}
+
+function renderAuthModal(){
+  if (!state.authModal) return '';
+  const m = state.authModal;
+  let body = '';
+  if (m.mode === 'login'){
+    const known = !!state.playerAuth[m.name];
+    body = `<div class="modal-title">${m.name}</div>
+      ${known
+        ? `<div class="modal-sub">Nhập mật khẩu để đăng nhập</div>`
+        : `<div class="modal-sub">Tên này chưa có mật khẩu — đặt mật khẩu cho lần đầu đăng nhập</div>`}
+      <input type="password" id="auth-pw" class="auth-input" placeholder="Mật khẩu" autofocus>
+      ${state.authError ? `<div class="auth-error">${state.authError}</div>` : ''}
+      <button class="auth-submit" onclick="onLoginSubmit()">${known ? 'Đăng nhập' : 'Tạo mật khẩu & đăng nhập'}</button>`;
+  } else {
+    body = `<div class="modal-title">Thêm người chơi mới</div>
+      <div class="modal-sub">Đặt tên và mật khẩu riêng cho người chơi mới</div>
+      <input type="text" id="auth-name" class="auth-input" placeholder="Tên người chơi">
+      <input type="password" id="auth-pw" class="auth-input" placeholder="Mật khẩu (ít nhất 4 ký tự)">
+      <input type="password" id="auth-pw2" class="auth-input" placeholder="Nhập lại mật khẩu">
+      ${state.authError ? `<div class="auth-error">${state.authError}</div>` : ''}
+      <button class="auth-submit" onclick="onCreateSubmit()">Tạo người chơi</button>`;
+  }
+  return `<div class="modal-backdrop" onclick="if(event.target===this)closeAuthModal()">
+    <div class="modal-card">
+      <button class="modal-close" onclick="closeAuthModal()">✕</button>
+      ${body}
+    </div>
+  </div>`;
+}
+
+async function setPrediction(matchId, pick){
+  if (!state.currentPlayer) return;
+  const latest = await fbGet('predictions');
+  state.predictions = latest || {};
+  state.predictions[matchId] = state.predictions[matchId] || {};
+  state.predictions[matchId][state.currentPlayer] = pick;
+  await fbSet('predictions', state.predictions);
+  renderDyn(matchId);
+}
+
+async function setResult(matchId, pick){
+  const latest = await fbGet('results');
+  state.results = latest || {};
+  state.results[matchId] = pick;
+  state.editingResult.delete(matchId);
+  await fbSet('results', state.results);
+  renderDyn(matchId);
+}
+
+function toggleEditResult(matchId){
+  if (state.editingResult.has(matchId)) state.editingResult.delete(matchId);
+  else state.editingResult.add(matchId);
+  renderDyn(matchId);
+}
+
+function toggleDay(date){
+  if (state.openDays.has(date)) state.openDays.delete(date);
+  else state.openDays.add(date);
+  render();
+}
+
+function setTab(tab){ state.tab = tab; render(); }
+function setFilter(f){ state.filter = f; render(); }
+
+function filteredMatches(){
+  const today = vnToday();
+  if (state.filter==='today') return MATCHES.filter(m=>m.date===today);
+  if (state.filter==='upcoming') return MATCHES.filter(m=> !getActualResult(m) || m.date>=today);
+  if (state.filter==='done') return MATCHES.filter(m=> !!getActualResult(m) && m.date<today);
+  return MATCHES;
+}
+
+function groupByDay(matches){
+  const groups = [];
+  let cur = null;
+  matches.forEach(m=>{
+    if (!cur || cur.date!==m.date){ cur = {date:m.date, weekday:m.weekday, items:[]}; groups.push(cur); }
+    cur.items.push(m);
+  });
+  return groups;
+}
+
+function pickButtons(m, current, onPick, cls){
+  const t1ph = isPlaceholder(m.team1), t2ph = isPlaceholder(m.team2);
+  const disabled = t1ph || t2ph;
+  function btn(value,label,code,extraClass){
+    const sel = current===value ? 'selected' : '';
+    return `<button class="pick-btn ${extraClass||''} ${sel}" ${disabled?'disabled':''} onclick="${disabled?'':onPick+`('${value}')`}">
+      <span class="code">${code}</span>${label}</button>`;
+  }
+  return `<div class="${cls}">
+    ${btn('team1', m.team1, shortCode(m.team1))}
+    ${btn('draw','Hòa','—','draw')}
+    ${btn('team2', m.team2, shortCode(m.team2))}
+  </div>` + (disabled?`<div class="placeholder-note">Chưa xác định đội — chờ kết quả vòng trước</div>`:'');
+}
+
+function renderDynHTML(m){
+  const myPick = state.currentPlayer ? (state.predictions[m.id]||{})[state.currentPlayer] : null;
+  const actual = getActualResult(m);
+  const onPickFn = `__onpick_${m.id}`;
+  window[onPickFn] = (v)=>setPrediction(m.id, v);
+  let html = '';
+  if (!state.currentPlayer){
+    html += `<div class="placeholder-note">Đăng nhập để chọn dự đoán của bạn</div>`;
+  } else {
+    html += pickButtons(m, myPick, onPickFn, 'pick-row');
+  }
+  // avatars
+  const picks = state.predictions[m.id] || {};
+  html += `<div class="avatars">` + state.players.map(p=>{
+    const pk = picks[p];
+    let cls = 'avt';
+    if (pk){
+      cls += ' picked';
+      if (actual){ cls += (pk===actual? ' correct':' wrong'); }
+    }
+    return `<div class="${cls}" title="${p}${pk? (': '+(pk==='draw'?'Hòa':(pk==='team1'?m.team1:m.team2))):''}">${initials(p)}</div>`;
+  }).join('') + `</div>`;
+  // result row
+  const editFn = `__onedit_${m.id}`;
+  window[editFn] = ()=>toggleEditResult(m.id);
+  const resFn = `__onres_${m.id}`;
+  window[resFn] = (v)=>setResult(m.id, v);
+  html += `<div class="result-row">`;
+  if (actual){
+    const label = actual==='draw' ? 'Hòa' : (actual==='team1'? m.team1 : m.team2);
+    html += `<div class="result-banner">KẾT QUẢ: ${label}${actual==='draw'?'':' thắng'}</div>`;
+  } else {
+    html += `<div class="result-banner" style="color:var(--chalk-dim);font-weight:500;">Chưa có kết quả</div>`;
+  }
+  html += `<button class="result-link" onclick="${editFn}()">${state.editingResult.has(m.id)?'Đóng':(actual?'Sửa':'Nhập kết quả')}</button>`;
+  html += `</div>`;
+  if (state.editingResult.has(m.id)){
+    html += pickButtons(m, actual, resFn, 'result-edit');
+  }
+  if (m.note) html += `<div class="note">★ ${m.note}</div>`;
+  return html;
+}
+
+function renderDyn(matchId){
+  const m = MATCHES.find(x=>x.id===matchId);
+  const el = document.getElementById('dyn-'+matchId);
+  if (el) el.innerHTML = renderDynHTML(m);
+}
+
+function ticketHTML(m){
+  return `<div class="ticket">
+    <div class="ticket-top">
+      <div class="t-time mono">${m.time}</div>
+      <div class="t-tags">
+        <span class="tag gold">${m.stage}${m.group?(' · '+m.group):''}</span>
+      </div>
+    </div>
+    <div class="t-venue" style="padding:0 14px 8px;text-align:left;max-width:none;">${m.venue}</div>
+    <div class="matchup">
+      <div class="team"><div class="badge">${shortCode(m.team1)}</div><div class="team-name">${m.team1}</div></div>
+      <div class="vs">VS</div>
+      <div class="team right"><div class="badge">${shortCode(m.team2)}</div><div class="team-name">${m.team2}</div></div>
+    </div>
+    <div class="perforation"></div>
+    <div class="dyn" id="dyn-${m.id}">${renderDynHTML(m)}</div>
+  </div>`;
+}
+
+function renderMatchesTab(){
+  const groups = groupByDay(filteredMatches());
+  if (groups.length===0) return `<div class="empty-state">Không có trận nào trong mục này.</div>`;
+  return groups.map(g=>{
+    const open = state.openDays.has(g.date);
+    const dateObj = new Date(g.date+'T00:00:00');
+    const dd = String(dateObj.getDate()).padStart(2,'0');
+    const mm = String(dateObj.getMonth()+1).padStart(2,'0');
+    return `<div class="day-header" onclick="toggleDay('${g.date}')">
+      <div class="day-left"><span class="day-date">${dd}/${mm}</span><span class="day-wd">${g.weekday}</span></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="day-count">${g.items.length} trận</span>
+        <span class="chevron ${open?'open':''}">▶</span>
+      </div>
+    </div>
+    <div class="day-matches ${open?'':'collapsed'}">
+      ${g.items.map(ticketHTML).join('')}
+    </div>`;
+  }).join('');
+}
+
+function computeStats(){
+  const stats = {}; state.players.forEach(p=>stats[p]={correct:0,total:0});
+  MATCHES.forEach(m=>{
+    const actual = getActualResult(m);
+    if (!actual) return;
+    const picks = state.predictions[m.id] || {};
+    state.players.forEach(p=>{
+      if (picks[p]){ stats[p].total++; if (picks[p]===actual) stats[p].correct++; }
+    });
+  });
+  const maxCorrect = Math.max(1, ...state.players.map(p=>stats[p].correct));
+  return state.players.map(p=>({name:p,...stats[p], pct: stats[p].total? Math.round(stats[p].correct/stats[p].total*100):0, bar: Math.round(stats[p].correct/maxCorrect*100)}))
+    .sort((a,b)=> b.correct-a.correct || b.pct-a.pct);
+}
+
+function renderLeaderboardTab(){
+  const rows = computeStats();
+  const rankClass = i => i===0?'gold':i===1?'silver':i===2?'bronze':'';
+  return `<div class="lb-wrap">
+    <div class="lb-add-row"><button class="lb-add-btn" onclick="openCreateModal()">+ Thêm người chơi</button></div>
+    <div class="lb-head">Xếp hạng theo số trận đoán đúng (chỉ tính các trận đã có kết quả)</div>
+    ${rows.map((r,i)=>`<div class="lb-row">
+      <div class="lb-rank ${rankClass(i)}">${i+1}</div>
+      <div class="lb-mid">
+        <div class="lb-name">${r.name}</div>
+        <div class="lb-bar-track"><div class="lb-bar-fill" style="width:${r.bar}%"></div></div>
+      </div>
+      <div class="lb-stats"><div class="big">${r.correct}/${r.total}</div><div class="small">${r.pct}% đúng</div></div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderLogin(){
+  return `<div class="login-wrap">
+    <div class="login-title disp">Bạn là <span style="color:var(--gold);">ai</span> trong hội?</div>
+    <div class="login-sub">Chọn tên rồi nhập mật khẩu để bắt đầu dự đoán World Cup 2026</div>
+    <div class="login-grid">
+      ${state.players.map(p=>`<button class="login-btn" onclick="openLoginModal('${p}')"><span class="badge">${initials(p)}</span>${p}</button>`).join('')}
+    </div>
+    <button class="add-player-btn" onclick="openCreateModal()"><span class="plus">+</span>Thêm người chơi mới</button>
+  </div>`;
+}
+
+function render(){
+  const app = document.getElementById('app');
+  if (!state.loaded){
+    app.innerHTML = `<div class="loading">Đang tải dữ liệu…</div>`;
+    return;
+  }
+  if (state.configError){
+    app.innerHTML = `<div class="login-wrap">
+      <div class="login-title disp">Chưa cấu hình <span style="color:var(--gold);">Firebase</span></div>
+      <div class="login-sub">Mở file HTML này bằng trình soạn thảo, tìm dòng <code>FIREBASE_DB_URL</code> ở gần đầu phần &lt;script&gt;, dán link Realtime Database của bạn vào đó (thay cho "FIREBASE_DATABASE_URL_HERE"), lưu lại rồi tải lại trang.</div>
+    </div>`;
+    return;
+  }
+  if (!state.currentPlayer){
+    app.innerHTML = `<div class="topbar"><div class="topbar-row"><div class="brand disp">Dự đoán <span>World Cup</span> 2026</div></div></div>` + renderLogin() + renderAuthModal();
+    return;
+  }
+  const scrollY = window.scrollY;
+  app.innerHTML = `
+    <div class="topbar">
+      <div class="topbar-row">
+        <div class="brand disp">Dự đoán <span>World Cup</span> 2026</div>
+        <div class="player-chip"><span>Xin chào, <b>${state.currentPlayer}</b></span><button onclick="logout()">Đổi</button></div>
+      </div>
+      <div class="tabs">
+        <button class="tab-btn ${state.tab==='matches'?'active':''}" onclick="setTab('matches')">Trận đấu</button>
+        <button class="tab-btn ${state.tab==='leaderboard'?'active':''}" onclick="setTab('leaderboard')">Bảng xếp hạng</button>
+      </div>
+    </div>
+    ${state.tab==='matches' ? `<div class="filters">
+      ${[['upcoming','Sắp tới'],['today','Hôm nay'],['done','Đã đấu xong'],['all','Tất cả']].map(([k,l])=>`<button class="chip ${state.filter===k?'active':''}" onclick="setFilter('${k}')">${l}</button>`).join('')}
+    </div>
+    <div class="content">${renderMatchesTab()}</div>` : renderLeaderboardTab()}
+    ${renderAuthModal()}
+  `;
+  window.scrollTo(0, state.tab==='matches' ? scrollY : 0);
+}
+
+init();
+</script>
+</body>
+</html>
