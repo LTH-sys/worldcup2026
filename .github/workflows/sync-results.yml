@@ -20,5 +20,5 @@ jobs:
       - name: Chay script dong bo ket qua
         env:
           FIREBASE_DB_URL: ${{ secrets.FIREBASE_DB_URL }}
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
         run: node scripts/sync-results.js
