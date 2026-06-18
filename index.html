@@ -92,6 +92,9 @@ button{font-family:inherit;}
 .result-edit{display:grid;grid-template-columns:1fr 64px 1fr;gap:6px;margin-top:10px;}
 .result-edit .pick-btn{border-color:var(--coral);}
 .result-edit .pick-btn.selected{background:var(--coral);border-color:var(--coral);color:#fff;}
+.confirm-btn{width:100%;margin-top:8px;background:var(--coral);color:#fff;border:none;border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;cursor:pointer;}
+.confirm-btn:disabled{opacity:.35;cursor:not-allowed;}
+.locked-badge{font-size:11px;color:var(--mint);font-weight:600;}
 
 .note{font-size:11px;color:var(--gold);margin-top:8px;font-style:italic;}
 
@@ -193,7 +196,7 @@ function initials(name){
 
 let state = {
   loaded:false, currentPlayer:null, predictions:{}, results:{},
-  players:[], playerAuth:{},
+  players:[], playerAuth:{}, resultsLocked:{}, pendingResult:{},
   tab:'matches', filter:'upcoming',
   openDays:new Set(), editingResult:new Set(),
   authModal:null, authError:'', configError:false,
@@ -201,7 +204,7 @@ let state = {
 
 // ====== CẤU HÌNH FIREBASE — DÁN LINK REALTIME DATABASE CỦA BẠN VÀO DÒNG DƯỚI ======
 // Ví dụ: "https://wc2026-dudoan-default-rtdb.asia-southeast1.firebasedatabase.app"
-const FIREBASE_DB_URL = "https://wc2026-vuive-default-rtdb.asia-southeast1.firebasedatabase.app/";
+const FIREBASE_DB_URL = "FIREBASE_DATABASE_URL_HERE";
 const DB_PATH = "worldcup2026";
 // ===================================================================================
 
@@ -233,11 +236,12 @@ async function init(){
     render();
     return;
   }
-  const [pred, res, playersRaw, authRaw] = await Promise.all([
-    fbGet('predictions'), fbGet('results'), fbGet('players'), fbGet('playerAuth')
+  const [pred, res, playersRaw, authRaw, lockedRaw] = await Promise.all([
+    fbGet('predictions'), fbGet('results'), fbGet('players'), fbGet('playerAuth'), fbGet('resultsLocked')
   ]);
   state.predictions = pred || {};
   state.results = res || {};
+  state.resultsLocked = lockedRaw || {};
   state.currentPlayer = localStorage.getItem('currentPlayer') || null;
   if (playersRaw){
     state.players = playersRaw;
@@ -383,18 +387,36 @@ async function setPrediction(matchId, pick){
   renderDyn(matchId);
 }
 
-async function setResult(matchId, pick){
-  const latest = await fbGet('results');
-  state.results = latest || {};
+function selectPendingResult(matchId, pick){
+  state.pendingResult[matchId] = pick;
+  renderDyn(matchId);
+}
+
+async function confirmResult(matchId){
+  const pick = state.pendingResult[matchId];
+  if (!pick) return;
+  const [latestResults, latestLocked] = await Promise.all([fbGet('results'), fbGet('resultsLocked')]);
+  state.results = latestResults || {};
+  state.resultsLocked = latestLocked || {};
   state.results[matchId] = pick;
+  state.resultsLocked[matchId] = true;
   state.editingResult.delete(matchId);
-  await fbSet('results', state.results);
+  delete state.pendingResult[matchId];
+  await Promise.all([fbSet('results', state.results), fbSet('resultsLocked', state.resultsLocked)]);
   renderDyn(matchId);
 }
 
 function toggleEditResult(matchId){
-  if (state.editingResult.has(matchId)) state.editingResult.delete(matchId);
-  else state.editingResult.add(matchId);
+  if (state.resultsLocked[matchId]) return; // đã khoá, không cho mở sửa nữa
+  if (state.editingResult.has(matchId)){
+    state.editingResult.delete(matchId);
+    delete state.pendingResult[matchId];
+  } else {
+    state.editingResult.add(matchId);
+    const m = MATCHES.find(x=>x.id===matchId);
+    const actual = getActualResult(m);
+    if (actual) state.pendingResult[matchId] = actual; // chọn sẵn giá trị hiện có để xác nhận nhanh
+  }
   renderDyn(matchId);
 }
 
@@ -463,21 +485,30 @@ function renderDynHTML(m){
     return `<div class="${cls}" title="${p}${pk? (': '+(pk==='draw'?'Hòa':(pk==='team1'?m.team1:m.team2))):''}">${initials(p)}</div>`;
   }).join('') + `</div>`;
   // result row
+  const locked = !!state.resultsLocked[m.id];
   const editFn = `__onedit_${m.id}`;
   window[editFn] = ()=>toggleEditResult(m.id);
-  const resFn = `__onres_${m.id}`;
-  window[resFn] = (v)=>setResult(m.id, v);
+  const selFn = `__onselres_${m.id}`;
+  window[selFn] = (v)=>selectPendingResult(m.id, v);
+  const confirmFn = `__onconfirm_${m.id}`;
+  window[confirmFn] = ()=>confirmResult(m.id);
   html += `<div class="result-row">`;
   if (actual){
     const label = actual==='draw' ? 'Hòa' : (actual==='team1'? m.team1 : m.team2);
-    html += `<div class="result-banner">KẾT QUẢ: ${label}${actual==='draw'?'':' thắng'}</div>`;
+    html += `<div class="result-banner">${locked?'🔒 ':''}KẾT QUẢ: ${label}${actual==='draw'?'':' thắng'}</div>`;
   } else {
     html += `<div class="result-banner" style="color:var(--chalk-dim);font-weight:500;">Chưa có kết quả</div>`;
   }
-  html += `<button class="result-link" onclick="${editFn}()">${state.editingResult.has(m.id)?'Đóng':(actual?'Sửa':'Nhập kết quả')}</button>`;
+  if (locked){
+    html += `<span class="locked-badge">Đã khoá</span>`;
+  } else {
+    html += `<button class="result-link" onclick="${editFn}()">${state.editingResult.has(m.id)?'Đóng':(actual?'Sửa':'Nhập kết quả')}</button>`;
+  }
   html += `</div>`;
-  if (state.editingResult.has(m.id)){
-    html += pickButtons(m, actual, resFn, 'result-edit');
+  if (!locked && state.editingResult.has(m.id)){
+    html += pickButtons(m, state.pendingResult[m.id], selFn, 'result-edit');
+    const hasPending = !!state.pendingResult[m.id];
+    html += `<button class="confirm-btn" ${hasPending?'':'disabled'} onclick="${confirmFn}()">🔒 Xác nhận &amp; khoá kết quả (không thể đổi sau khi khoá)</button>`;
   }
   if (m.note) html += `<div class="note">★ ${m.note}</div>`;
   return html;
