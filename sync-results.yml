@@ -1,0 +1,24 @@
+name: Tu dong cap nhat ket qua World Cup 2026
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # chạy mỗi giờ (vào phút 0)
+  workflow_dispatch: {}    # cho phép bấm "Run workflow" để chạy thử ngay
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Chay script dong bo ket qua
+        env:
+          FIREBASE_DB_URL: ${{ secrets.FIREBASE_DB_URL }}
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+        run: node scripts/sync-results.js
