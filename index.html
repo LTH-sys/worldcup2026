@@ -62,7 +62,7 @@ button{font-family:inherit;}
 .matchup{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:4px 14px 14px;gap:6px;}
 .team{display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;}
 .team.right{align-items:center;}
-.badge{width:42px;height:42px;border-radius:50%;background:var(--ink);border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:'Teko',sans-serif;font-weight:600;font-size:15px;color:var(--chalk);}
+.badge{width:42px;height:42px;border-radius:50%;background:var(--ink);border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--chalk);}
 .team-name{font-size:11.5px;color:var(--chalk-dim);max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .vs{font-family:'Teko',sans-serif;font-size:16px;color:var(--gold-dim);font-weight:600;}
 
@@ -81,10 +81,17 @@ button{font-family:inherit;}
 .placeholder-note{font-size:11px;color:var(--chalk-dim);text-align:center;padding:6px 0 0;}
 
 .avatars{display:flex;gap:5px;flex-wrap:wrap;margin-top:11px;}
-.avt{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:1.5px solid var(--line);color:var(--chalk-dim);background:transparent;}
+.avt{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;border:1.5px solid var(--line);color:var(--chalk-dim);background:transparent;}
 .avt.picked{background:rgba(244,241,234,.10);color:var(--chalk);border-color:rgba(244,241,234,.3);}
 .avt.correct{background:var(--mint);color:var(--ink);border-color:var(--mint);}
 .avt.wrong{background:transparent;color:var(--coral);border-color:var(--coral);}
+
+/* ---------- avatar picker ---------- */
+.avatar-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:12px 0;}
+.avatar-opt{width:42px;height:42px;border-radius:50%;border:2px solid var(--line);background:var(--ink);display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;transition:border-color .12s,transform .12s;}
+.avatar-opt:active{transform:scale(1.15);}
+.avatar-opt.selected{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-dim);}
+.player-chip .avt-chip{font-size:20px;cursor:pointer;}
 
 .result-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);}
 .result-banner{font-size:12px;font-weight:700;color:var(--gold);}
@@ -190,13 +197,16 @@ function shortCode(name){
 function isPlaceholder(name){
   return /Nhất bảng|Nhì bảng|Hạng 3|Thắng trận|Thua trận/.test(name);
 }
-function initials(name){
-  return name.slice(0,2).toUpperCase();
+
+const AVATARS = ['⚽','🏆','🦁','🐯','🦅','🐺','🐉','🦈','🔥','⭐','🎯','🚀','💎','👑','🎩','⚡','🌟','🏅','🥇','🦊','🐻','🦖','🐘','🦁','🎸','🌍','🌊','🏔️','🎪','🍀'];
+
+function getAvatar(name){
+  return (state.playerAvatars && state.playerAvatars[name]) || '👤';
 }
 
 let state = {
   loaded:false, currentPlayer:null, predictions:{}, results:{},
-  players:[], playerAuth:{}, resultsLocked:{}, pendingResult:{},
+  players:[], playerAuth:{}, playerAvatars:{}, resultsLocked:{}, pendingResult:{},
   tab:'matches', filter:'upcoming',
   openDays:new Set(), editingResult:new Set(),
   authModal:null, authError:'', configError:false,
@@ -236,12 +246,13 @@ async function init(){
     render();
     return;
   }
-  const [pred, res, playersRaw, authRaw, lockedRaw] = await Promise.all([
-    fbGet('predictions'), fbGet('results'), fbGet('players'), fbGet('playerAuth'), fbGet('resultsLocked')
+  const [pred, res, playersRaw, authRaw, lockedRaw, avatarsRaw] = await Promise.all([
+    fbGet('predictions'), fbGet('results'), fbGet('players'), fbGet('playerAuth'), fbGet('resultsLocked'), fbGet('playerAvatars')
   ]);
   state.predictions = pred || {};
   state.results = res || {};
   state.resultsLocked = lockedRaw || {};
+  state.playerAvatars = avatarsRaw || {};
   state.currentPlayer = localStorage.getItem('currentPlayer') || null;
   if (playersRaw){
     state.players = playersRaw;
@@ -269,6 +280,9 @@ function getActualResult(m){
 function loginAs(name){
   state.currentPlayer = name;
   try{ localStorage.setItem('currentPlayer', name); }catch(e){}
+  if (!state.playerAvatars[name]){
+    state.authModal = {mode:'avatar'};
+  }
   render();
 }
 function logout(){
@@ -287,9 +301,23 @@ function openCreateModal(){
   state.authError = '';
   render();
 }
+function openAvatarPicker(){
+  state.authModal = {mode:'avatar'};
+  state.authError = '';
+  render();
+}
 function closeAuthModal(){
   state.authModal = null;
   state.authError = '';
+  render();
+}
+
+async function saveAvatar(emoji){
+  const latest = await fbGet('playerAvatars');
+  state.playerAvatars = latest || {};
+  state.playerAvatars[state.currentPlayer] = emoji;
+  await fbSet('playerAvatars', state.playerAvatars);
+  state.authModal = null;
   render();
 }
 
@@ -360,7 +388,7 @@ function renderAuthModal(){
       <input type="password" id="auth-pw" class="auth-input" placeholder="Mật khẩu" autofocus>
       ${state.authError ? `<div class="auth-error">${state.authError}</div>` : ''}
       <button class="auth-submit" onclick="onLoginSubmit()">${known ? 'Đăng nhập' : 'Tạo mật khẩu & đăng nhập'}</button>`;
-  } else {
+  } else if (m.mode === 'create'){
     body = `<div class="modal-title">Thêm người chơi mới</div>
       <div class="modal-sub">Đặt tên và mật khẩu riêng cho người chơi mới</div>
       <input type="text" id="auth-name" class="auth-input" placeholder="Tên người chơi">
@@ -368,6 +396,13 @@ function renderAuthModal(){
       <input type="password" id="auth-pw2" class="auth-input" placeholder="Nhập lại mật khẩu">
       ${state.authError ? `<div class="auth-error">${state.authError}</div>` : ''}
       <button class="auth-submit" onclick="onCreateSubmit()">Tạo người chơi</button>`;
+  } else if (m.mode === 'avatar'){
+    const current = getAvatar(state.currentPlayer);
+    body = `<div class="modal-title">Chọn avatar</div>
+      <div class="modal-sub">Chọn một biểu tượng đại diện cho bạn, ${state.currentPlayer}</div>
+      <div class="avatar-grid">
+        ${AVATARS.map(e=>`<button class="avatar-opt ${current===e?'selected':''}" onclick="saveAvatar('${e}')">${e}</button>`).join('')}
+      </div>`;
   }
   return `<div class="modal-backdrop" onclick="if(event.target===this)closeAuthModal()">
     <div class="modal-card">
@@ -482,7 +517,7 @@ function renderDynHTML(m){
       cls += ' picked';
       if (actual){ cls += (pk===actual? ' correct':' wrong'); }
     }
-    return `<div class="${cls}" title="${p}${pk? (': '+(pk==='draw'?'Hòa':(pk==='team1'?m.team1:m.team2))):''}">${initials(p)}</div>`;
+    return `<div class="${cls}" title="${p}${pk? (': '+(pk==='draw'?'Hòa':(pk==='team1'?m.team1:m.team2))):''}">${getAvatar(p)}</div>`;
   }).join('') + `</div>`;
   // result row
   const locked = !!state.resultsLocked[m.id];
@@ -584,7 +619,7 @@ function renderLeaderboardTab(){
     ${rows.map((r,i)=>`<div class="lb-row">
       <div class="lb-rank ${rankClass(i)}">${i+1}</div>
       <div class="lb-mid">
-        <div class="lb-name">${r.name}</div>
+        <div class="lb-name">${getAvatar(r.name)} ${r.name}</div>
         <div class="lb-bar-track"><div class="lb-bar-fill" style="width:${r.bar}%"></div></div>
       </div>
       <div class="lb-stats"><div class="big">${r.correct}/${r.total}</div><div class="small">${r.pct}% đúng</div></div>
@@ -597,7 +632,7 @@ function renderLogin(){
     <div class="login-title disp">Bạn là <span style="color:var(--gold);">ai</span> trong hội?</div>
     <div class="login-sub">Chọn tên rồi nhập mật khẩu để bắt đầu dự đoán World Cup 2026</div>
     <div class="login-grid">
-      ${state.players.map(p=>`<button class="login-btn" onclick="openLoginModal('${p}')"><span class="badge">${initials(p)}</span>${p}</button>`).join('')}
+      ${state.players.map(p=>`<button class="login-btn" onclick="openLoginModal('${p}')"><span class="badge">${getAvatar(p)}</span>${p}</button>`).join('')}
     </div>
     <button class="add-player-btn" onclick="openCreateModal()"><span class="plus">+</span>Thêm người chơi mới</button>
   </div>`;
@@ -625,7 +660,7 @@ function render(){
     <div class="topbar">
       <div class="topbar-row">
         <div class="brand disp">Dự đoán <span>World Cup</span> 2026</div>
-        <div class="player-chip"><span>Xin chào, <b>${state.currentPlayer}</b></span><button onclick="logout()">Đổi</button></div>
+        <div class="player-chip"><span class="avt-chip" onclick="openAvatarPicker()" title="Đổi avatar">${getAvatar(state.currentPlayer)}</span><span>Xin chào, <b>${state.currentPlayer}</b></span><button onclick="logout()">Đổi</button></div>
       </div>
       <div class="tabs">
         <button class="tab-btn ${state.tab==='matches'?'active':''}" onclick="setTab('matches')">Trận đấu</button>
