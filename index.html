@@ -206,9 +206,9 @@ function getAvatar(name){
 
 let state = {
   loaded:false, currentPlayer:null, predictions:{}, results:{},
-  players:[], playerAuth:{}, playerAvatars:{}, resultsLocked:{}, pendingResult:{},
+  players:[], playerAuth:{}, playerAvatars:{}, predictionsLocked:{}, pendingPrediction:{},
   tab:'matches', filter:'upcoming',
-  openDays:new Set(), editingResult:new Set(),
+  openDays:new Set(),
   authModal:null, authError:'', configError:false,
 };
 
@@ -247,11 +247,11 @@ async function init(){
     return;
   }
   const [pred, res, playersRaw, authRaw, lockedRaw, avatarsRaw] = await Promise.all([
-    fbGet('predictions'), fbGet('results'), fbGet('players'), fbGet('playerAuth'), fbGet('resultsLocked'), fbGet('playerAvatars')
+    fbGet('predictions'), fbGet('results'), fbGet('players'), fbGet('playerAuth'), fbGet('predictionsLocked'), fbGet('playerAvatars')
   ]);
   state.predictions = pred || {};
   state.results = res || {};
-  state.resultsLocked = lockedRaw || {};
+  state.predictionsLocked = lockedRaw || {};
   state.playerAvatars = avatarsRaw || {};
   state.currentPlayer = localStorage.getItem('currentPlayer') || null;
   if (playersRaw){
@@ -412,47 +412,30 @@ function renderAuthModal(){
   </div>`;
 }
 
-async function setPrediction(matchId, pick){
+function selectPendingPrediction(matchId, pick){
+  state.pendingPrediction[matchId] = pick;
+  renderDyn(matchId);
+}
+
+async function confirmPrediction(matchId){
   if (!state.currentPlayer) return;
-  const latest = await fbGet('predictions');
-  state.predictions = latest || {};
+  const pick = state.pendingPrediction[matchId];
+  if (!pick) return;
+  const [latestPred, latestLocked] = await Promise.all([fbGet('predictions'), fbGet('predictionsLocked')]);
+  state.predictions = latestPred || {};
+  state.predictionsLocked = latestLocked || {};
   state.predictions[matchId] = state.predictions[matchId] || {};
   state.predictions[matchId][state.currentPlayer] = pick;
-  await fbSet('predictions', state.predictions);
+  const lockKey = matchId + '_' + state.currentPlayer;
+  state.predictionsLocked[lockKey] = true;
+  delete state.pendingPrediction[matchId];
+  await Promise.all([fbSet('predictions', state.predictions), fbSet('predictionsLocked', state.predictionsLocked)]);
   renderDyn(matchId);
 }
 
-function selectPendingResult(matchId, pick){
-  state.pendingResult[matchId] = pick;
-  renderDyn(matchId);
-}
-
-async function confirmResult(matchId){
-  const pick = state.pendingResult[matchId];
-  if (!pick) return;
-  const [latestResults, latestLocked] = await Promise.all([fbGet('results'), fbGet('resultsLocked')]);
-  state.results = latestResults || {};
-  state.resultsLocked = latestLocked || {};
-  state.results[matchId] = pick;
-  state.resultsLocked[matchId] = true;
-  state.editingResult.delete(matchId);
-  delete state.pendingResult[matchId];
-  await Promise.all([fbSet('results', state.results), fbSet('resultsLocked', state.resultsLocked)]);
-  renderDyn(matchId);
-}
-
-function toggleEditResult(matchId){
-  if (state.resultsLocked[matchId]) return; // đã khoá, không cho mở sửa nữa
-  if (state.editingResult.has(matchId)){
-    state.editingResult.delete(matchId);
-    delete state.pendingResult[matchId];
-  } else {
-    state.editingResult.add(matchId);
-    const m = MATCHES.find(x=>x.id===matchId);
-    const actual = getActualResult(m);
-    if (actual) state.pendingResult[matchId] = actual; // chọn sẵn giá trị hiện có để xác nhận nhanh
-  }
-  renderDyn(matchId);
+function isMyPredictionLocked(matchId){
+  if (!state.currentPlayer) return false;
+  return !!state.predictionsLocked[matchId + '_' + state.currentPlayer];
 }
 
 function toggleDay(date){
@@ -499,16 +482,30 @@ function pickButtons(m, current, onPick, cls){
 
 function renderDynHTML(m){
   const myPick = state.currentPlayer ? (state.predictions[m.id]||{})[state.currentPlayer] : null;
+  const myLocked = isMyPredictionLocked(m.id);
+  const pending = state.pendingPrediction[m.id];
   const actual = getActualResult(m);
-  const onPickFn = `__onpick_${m.id}`;
-  window[onPickFn] = (v)=>setPrediction(m.id, v);
   let html = '';
+
+  // --- prediction section ---
   if (!state.currentPlayer){
     html += `<div class="placeholder-note">Đăng nhập để chọn dự đoán của bạn</div>`;
+  } else if (myLocked){
+    const lockLabel = myPick==='draw' ? 'Hòa' : (myPick==='team1'? m.team1 : m.team2);
+    html += `<div class="placeholder-note" style="color:var(--mint);">🔒 Bạn đã chọn: <b>${lockLabel}</b></div>`;
   } else {
-    html += pickButtons(m, myPick, onPickFn, 'pick-row');
+    const selFn = `__onsel_${m.id}`;
+    window[selFn] = (v)=>selectPendingPrediction(m.id, v);
+    const confirmFn = `__onconfirmpred_${m.id}`;
+    window[confirmFn] = ()=>confirmPrediction(m.id);
+    const showPick = pending || myPick;
+    html += pickButtons(m, showPick, selFn, 'pick-row');
+    if (showPick){
+      html += `<button class="confirm-btn" style="background:var(--gold);color:var(--ink);" onclick="${confirmFn}()">🔒 Xác nhận dự đoán (không thể đổi sau khi xác nhận)</button>`;
+    }
   }
-  // avatars
+
+  // --- avatars row ---
   const picks = state.predictions[m.id] || {};
   html += `<div class="avatars">` + state.players.map(p=>{
     const pk = picks[p];
@@ -519,32 +516,15 @@ function renderDynHTML(m){
     }
     return `<div class="${cls}" title="${p}${pk? (': '+(pk==='draw'?'Hòa':(pk==='team1'?m.team1:m.team2))):''}">${getAvatar(p)}</div>`;
   }).join('') + `</div>`;
-  // result row
-  const locked = !!state.resultsLocked[m.id];
-  const editFn = `__onedit_${m.id}`;
-  window[editFn] = ()=>toggleEditResult(m.id);
-  const selFn = `__onselres_${m.id}`;
-  window[selFn] = (v)=>selectPendingResult(m.id, v);
-  const confirmFn = `__onconfirm_${m.id}`;
-  window[confirmFn] = ()=>confirmResult(m.id);
-  html += `<div class="result-row">`;
+
+  // --- result row (read-only, auto-updated) ---
   if (actual){
     const label = actual==='draw' ? 'Hòa' : (actual==='team1'? m.team1 : m.team2);
-    html += `<div class="result-banner">${locked?'🔒 ':''}KẾT QUẢ: ${label}${actual==='draw'?'':' thắng'}</div>`;
+    html += `<div class="result-row"><div class="result-banner">KẾT QUẢ: ${label}${actual==='draw'?'':' thắng'}</div></div>`;
   } else {
-    html += `<div class="result-banner" style="color:var(--chalk-dim);font-weight:500;">Chưa có kết quả</div>`;
+    html += `<div class="result-row"><div class="result-banner" style="color:var(--chalk-dim);font-weight:500;">Chưa có kết quả</div></div>`;
   }
-  if (locked){
-    html += `<span class="locked-badge">Đã khoá</span>`;
-  } else {
-    html += `<button class="result-link" onclick="${editFn}()">${state.editingResult.has(m.id)?'Đóng':(actual?'Sửa':'Nhập kết quả')}</button>`;
-  }
-  html += `</div>`;
-  if (!locked && state.editingResult.has(m.id)){
-    html += pickButtons(m, state.pendingResult[m.id], selFn, 'result-edit');
-    const hasPending = !!state.pendingResult[m.id];
-    html += `<button class="confirm-btn" ${hasPending?'':'disabled'} onclick="${confirmFn}()">🔒 Xác nhận &amp; khoá kết quả (không thể đổi sau khi khoá)</button>`;
-  }
+
   if (m.note) html += `<div class="note">★ ${m.note}</div>`;
   return html;
 }
