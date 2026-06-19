@@ -131,6 +131,20 @@ button{font-family:inherit;}
 .lb-add-row{display:flex;justify-content:flex-end;margin-bottom:6px;}
 .lb-add-btn{background:none;border:1px solid var(--line);color:var(--gold);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;}
 
+/* ---------- admin ---------- */
+.admin-btn{background:none;border:1px solid var(--line);color:var(--chalk-dim);border-radius:20px;padding:4px 10px;font-size:11px;cursor:pointer;}
+.admin-panel{padding:14px;background:var(--pitch-light);border-radius:14px;margin:14px;border:1px solid rgba(226,114,91,.3);}
+.admin-panel .admin-title{font-size:14px;font-weight:700;color:var(--coral);margin-bottom:10px;}
+.admin-panel .admin-desc{font-size:12px;color:var(--chalk-dim);margin-bottom:8px;}
+.admin-reset-btn{width:100%;background:var(--coral);color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px;}
+.admin-reset-btn:last-child{margin-bottom:0;}
+.admin-confirm-box{background:var(--ink);border:1px solid var(--coral);border-radius:10px;padding:12px;margin-top:8px;}
+.admin-confirm-box p{font-size:12px;color:var(--coral);margin:0 0 8px;}
+.admin-confirm-box .admin-cf-btns{display:flex;gap:8px;}
+.admin-confirm-box button{flex:1;padding:9px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;}
+.admin-confirm-box .cf-yes{background:var(--coral);color:#fff;}
+.admin-confirm-box .cf-no{background:rgba(244,241,234,.1);color:var(--chalk);}
+
 /* ---------- leaderboard ---------- */
 .lb-wrap{padding:14px;}
 .lb-head{font-size:13px;color:var(--chalk-dim);margin-bottom:14px;}
@@ -215,6 +229,7 @@ let state = {
   tab:'matches', filter:'upcoming',
   openDays:new Set(),
   authModal:null, authError:'', configError:false,
+  isAdmin:false, adminConfirm:null,
 };
 
 // ====== CẤU HÌNH FIREBASE — DÁN LINK REALTIME DATABASE CỦA BẠN VÀO DÒNG DƯỚI ======
@@ -409,12 +424,96 @@ function renderAuthModal(){
       <div class="avatar-grid">
         ${AVATARS.map(e=>`<button class="avatar-opt ${current===e?'selected':''}" onclick="saveAvatar('${e}')">${e}</button>`).join('')}
       </div>`;
+  } else if (m.mode === 'admin'){
+    body = `<div class="modal-title">🔒 Admin</div>
+      <div class="modal-sub">Nhập mã PIN admin (lần đầu sẽ tạo PIN mới)</div>
+      <input type="password" id="auth-pw" class="auth-input" placeholder="Mã PIN admin" autofocus>
+      ${state.authError ? `<div class="auth-error">${state.authError}</div>` : ''}
+      <button class="auth-submit" onclick="doAdminLogin(document.getElementById('auth-pw').value)">Xác nhận</button>`;
   }
   return `<div class="modal-backdrop" onclick="if(event.target===this)closeAuthModal()">
     <div class="modal-card">
       <button class="modal-close" onclick="closeAuthModal()">✕</button>
       ${body}
     </div>
+  </div>`;
+}
+
+// ---- admin ----
+function openAdminModal(){
+  state.authModal = {mode:'admin'};
+  state.authError = '';
+  render();
+}
+
+async function doAdminLogin(pin){
+  if (!pin || pin.length < 4){ state.authError = 'PIN cần ít nhất 4 ký tự.'; render(); return; }
+  const latest = await fbGet('adminPin');
+  const hash = await hashPassword(pin);
+  if (!latest){
+    await fbSet('adminPin', hash);
+    state.isAdmin = true;
+    state.authModal = null; state.authError = '';
+    render(); return;
+  }
+  if (latest === hash){
+    state.isAdmin = true;
+    state.authModal = null; state.authError = '';
+    render(); return;
+  }
+  state.authError = 'Sai mã PIN admin.';
+  render();
+}
+
+function askResetConfirm(type){
+  state.adminConfirm = type;
+  render();
+}
+function cancelReset(){
+  state.adminConfirm = null;
+  render();
+}
+
+async function doReset(type){
+  if (type === 'predictions'){
+    await Promise.all([fbSet('predictions',{}), fbSet('predictionsLocked',{})]);
+    state.predictions = {}; state.predictionsLocked = {};
+  } else if (type === 'results'){
+    await Promise.all([fbSet('results',{}), fbSet('scores',{})]);
+    state.results = {}; state.scores = {};
+  } else if (type === 'all'){
+    await Promise.all([fbSet('predictions',{}), fbSet('predictionsLocked',{}), fbSet('results',{}), fbSet('scores',{})]);
+    state.predictions = {}; state.predictionsLocked = {}; state.results = {}; state.scores = {};
+  }
+  state.adminConfirm = null;
+  render();
+}
+
+function renderAdminPanel(){
+  if (!state.isAdmin) return '';
+  const confirms = {
+    predictions: 'Xoá HẾT dự đoán + khoá dự đoán của tất cả người chơi? Hành động này không thể hoàn tác!',
+    results: 'Xoá HẾT kết quả + tỷ số đã lưu trên Firebase? (Tỷ số gắn sẵn trong app vẫn còn. Script tự động sẽ điền lại khi chạy.)',
+    all: 'Xoá TẤT CẢ: dự đoán + khoá + kết quả + tỷ số? Toàn bộ trở về trắng!'
+  };
+  function resetBtn(type, label){
+    if (state.adminConfirm === type){
+      return `<div class="admin-confirm-box">
+        <p>⚠️ ${confirms[type]}</p>
+        <div class="admin-cf-btns">
+          <button class="cf-yes" onclick="doReset('${type}')">Xác nhận xoá</button>
+          <button class="cf-no" onclick="cancelReset()">Huỷ</button>
+        </div>
+      </div>`;
+    }
+    return `<button class="admin-reset-btn" onclick="askResetConfirm('${type}')">${label}</button>`;
+  }
+  return `<div class="admin-panel">
+    <div class="admin-title">🔧 Bảng điều khiển Admin</div>
+    <div class="admin-desc">Reset dữ liệu trước khi bắt đầu mùa giải mới hoặc khi cần làm lại từ đầu.</div>
+    ${resetBtn('predictions','🗑️ Reset tất cả dự đoán')}
+    ${resetBtn('results','🗑️ Reset tất cả kết quả & tỷ số')}
+    ${resetBtn('all','💣 Reset toàn bộ (dự đoán + kết quả)')}
   </div>`;
 }
 
@@ -545,7 +644,7 @@ function renderDyn(matchId){
 function ticketHTML(m){
   return `<div class="ticket">
     <div class="ticket-top">
-      <div class="t-time mono">${m.time}</div>
+      <div class="t-time mono">${m.time} <span style="font-size:10px;font-weight:400;color:var(--chalk-dim);">giờ VN</span></div>
       <div class="t-tags">
         <span class="tag gold">${m.stage}${m.group?(' · '+m.group):''}</span>
       </div>
@@ -667,7 +766,7 @@ function render(){
     <div class="topbar">
       <div class="topbar-row">
         <div class="brand disp">Dự đoán <span>World Cup</span> 2026</div>
-        <div class="player-chip"><span class="avt-chip" onclick="openAvatarPicker()" title="Đổi avatar">${getAvatar(state.currentPlayer)}</span><span>Xin chào, <b>${state.currentPlayer}</b></span><button onclick="logout()">Đổi</button></div>
+        <div class="player-chip"><span class="avt-chip" onclick="openAvatarPicker()" title="Đổi avatar">${getAvatar(state.currentPlayer)}</span><span>Xin chào, <b>${state.currentPlayer}</b></span><button onclick="logout()">Đổi</button><button class="admin-btn" onclick="openAdminModal()">⚙️</button></div>
       </div>
       <div class="tabs">
         <button class="tab-btn ${state.tab==='matches'?'active':''}" onclick="setTab('matches')">Trận đấu</button>
@@ -677,7 +776,7 @@ function render(){
     ${state.tab==='matches' ? `<div class="filters">
       ${[['upcoming','Sắp tới'],['today','Hôm nay'],['done','Đã đấu xong'],['all','Tất cả']].map(([k,l])=>`<button class="chip ${state.filter===k?'active':''}" onclick="setFilter('${k}')">${l}</button>`).join('')}
     </div>
-    <div class="content">${renderMatchesTab()}</div>` : renderLeaderboardTab()}
+    <div class="content">${renderMatchesTab()}</div>` : renderLeaderboardTab() + renderAdminPanel()}
     ${renderAuthModal()}
   `;
   window.scrollTo(0, state.tab==='matches' ? scrollY : 0);
