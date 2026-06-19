@@ -142,10 +142,15 @@ button{font-family:inherit;}
 .lb-mid{flex:1;min-width:0;}
 .lb-name{font-size:15px;font-weight:600;margin-bottom:5px;}
 .lb-bar-track{height:6px;background:rgba(244,241,234,.08);border-radius:4px;overflow:hidden;}
-.lb-bar-fill{height:100%;background:var(--mint);}
+.lb-bar-fill{height:100%;background:var(--gold);}
 .lb-stats{flex:0 0 auto;text-align:right;font-family:'Roboto Mono',monospace;}
-.lb-stats .big{font-size:16px;font-weight:700;}
+.lb-stats .big{font-size:16px;font-weight:700;color:var(--gold);}
 .lb-stats .small{font-size:10.5px;color:var(--chalk-dim);}
+.lb-bananas{font-size:12px;letter-spacing:-1px;line-height:1.3;margin-top:3px;word-break:break-all;}
+.banana-pot{text-align:center;padding:16px 12px;margin-bottom:14px;background:var(--pitch-light);border-radius:14px;border:1px solid var(--line);}
+.banana-pot .pot-num{font-family:'Teko',sans-serif;font-size:42px;font-weight:700;color:var(--gold);line-height:1;}
+.banana-pot .pot-label{font-size:12px;color:var(--chalk-dim);margin-top:2px;}
+.banana-pot .pot-emoji{font-size:28px;margin-bottom:4px;}
 
 .loading{flex:1;display:flex;align-items:center;justify-content:center;color:var(--chalk-dim);font-size:13px;}
 .empty-state{text-align:center;color:var(--chalk-dim);font-size:13px;padding:40px 20px;}
@@ -578,34 +583,54 @@ function renderMatchesTab(){
 }
 
 function computeStats(){
-  const stats = {}; state.players.forEach(p=>stats[p]={correct:0,total:0});
+  const CHUOI_PER_LOSS = 20;
+  const stats = {}; state.players.forEach(p=>stats[p]={wrong:0,correct:0,total:0});
   MATCHES.forEach(m=>{
     const actual = getActualResult(m);
     if (!actual) return;
     const picks = state.predictions[m.id] || {};
     state.players.forEach(p=>{
-      if (picks[p]){ stats[p].total++; if (picks[p]===actual) stats[p].correct++; }
+      if (picks[p]){
+        stats[p].total++;
+        if (picks[p]===actual) stats[p].correct++;
+        else stats[p].wrong++;
+      }
     });
   });
-  const maxCorrect = Math.max(1, ...state.players.map(p=>stats[p].correct));
-  return state.players.map(p=>({name:p,...stats[p], pct: stats[p].total? Math.round(stats[p].correct/stats[p].total*100):0, bar: Math.round(stats[p].correct/maxCorrect*100)}))
-    .sort((a,b)=> b.correct-a.correct || b.pct-a.pct);
+  const maxWrong = Math.max(1, ...state.players.map(p=>stats[p].wrong));
+  return state.players.map(p=>{
+    const s = stats[p];
+    return {name:p, ...s, chuoi: s.wrong * CHUOI_PER_LOSS, bar: Math.round(s.wrong/maxWrong*100)};
+  }).sort((a,b)=> b.chuoi-a.chuoi || a.correct-b.correct);
 }
 
 function renderLeaderboardTab(){
   const rows = computeStats();
-  const rankClass = i => i===0?'gold':i===1?'silver':i===2?'bronze':'';
+  const totalChuoi = rows.reduce((s,r)=>s+r.chuoi, 0);
+  const totalMatches = rows.length>0 ? rows[0].total : 0; // all players see same number of finished matches
   return `<div class="lb-wrap">
     <div class="lb-add-row"><button class="lb-add-btn" onclick="openCreateModal()">+ Thêm người chơi</button></div>
-    <div class="lb-head">Xếp hạng theo số trận đoán đúng (chỉ tính các trận đã có kết quả)</div>
-    ${rows.map((r,i)=>`<div class="lb-row">
-      <div class="lb-rank ${rankClass(i)}">${i+1}</div>
+    <div class="banana-pot">
+      <div class="pot-emoji">🍌🏆🍌</div>
+      <div class="pot-num">${totalChuoi} chuối</div>
+      <div class="pot-label">Tổng quỹ chuối của cả nhóm</div>
+    </div>
+    <div class="lb-head">Mỗi trận đoán sai = 20 chuối đóng góp vào quỹ</div>
+    ${rows.map((r,i)=>{
+      const bananaIcons = '🍌'.repeat(Math.min(r.wrong, 30));
+      return `<div class="lb-row">
+      <div class="lb-rank">${i+1}</div>
       <div class="lb-mid">
         <div class="lb-name">${getAvatar(r.name)} ${r.name}</div>
         <div class="lb-bar-track"><div class="lb-bar-fill" style="width:${r.bar}%"></div></div>
+        ${r.wrong>0?`<div class="lb-bananas">${bananaIcons}</div>`:''}
       </div>
-      <div class="lb-stats"><div class="big">${r.correct}/${r.total}</div><div class="small">${r.pct}% đúng</div></div>
-    </div>`).join('')}
+      <div class="lb-stats">
+        <div class="big">${r.chuoi} 🍌</div>
+        <div class="small">${r.wrong} sai / ${r.total} trận</div>
+        <div class="small">${r.correct} đúng</div>
+      </div>
+    </div>`;}).join('')}
   </div>`;
 }
 
