@@ -68,26 +68,32 @@ async function main() {
     const fx = fixtures[i];
 
     if (!FINISHED_STATUSES.has(fx.status)) continue;
-    if (existingResults[ours.id]) continue; // đã có kết quả (tự động hoặc người nhập tay) thì không ghi đè
 
-    const winner = fx.score && fx.score.winner; // "HOME_TEAM" | "AWAY_TEAM" | "DRAW" | null
+    const winner = fx.score && fx.score.winner;
     if (!winner) continue;
 
-    let outcome;
-    if (winner === "HOME_TEAM") outcome = "team1";
-    else if (winner === "AWAY_TEAM") outcome = "team2";
-    else outcome = "draw";
-
-    existingResults[ours.id] = outcome;
-
     const ft = fx.score && fx.score.fullTime ? fx.score.fullTime : {};
-    if (ft.home !== null && ft.home !== undefined && ft.away !== null && ft.away !== undefined) {
-      existingScores[ours.id] = `${ft.home} - ${ft.away}`;
+    const hasScore = ft.home !== null && ft.home !== undefined && ft.away !== null && ft.away !== undefined;
+
+    // Ghi kết quả thắng/thua nếu chưa có
+    if (!existingResults[ours.id]) {
+      let outcome;
+      if (winner === "HOME_TEAM") outcome = "team1";
+      else if (winner === "AWAY_TEAM") outcome = "team2";
+      else outcome = "draw";
+      existingResults[ours.id] = outcome;
+      updated++;
     }
 
-    updated++;
+    // Ghi tỷ số nếu chưa có (kể cả khi kết quả đã có từ trước)
+    if (hasScore && !existingScores[ours.id]) {
+      existingScores[ours.id] = `${ft.home} - ${ft.away}`;
+      updated++;
+    }
+
+    if (!existingResults[ours.id] || !existingScores[ours.id]) continue;
     console.log(
-      `Trận #${ours.id} [${ours.team1} vs ${ours.team2}] <-> API [${fx.homeTeam.name} ${ft.home}-${ft.away} ${fx.awayTeam.name}, winner=${winner}] => ${outcome}`
+      `Trận #${ours.id} [${ours.team1} vs ${ours.team2}] <-> API [${fx.homeTeam.name} ${ft.home}-${ft.away} ${fx.awayTeam.name}] => ${existingResults[ours.id]}, tỷ số: ${existingScores[ours.id]}`
     );
   }
 
