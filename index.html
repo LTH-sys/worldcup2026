@@ -205,7 +205,7 @@ function getAvatar(name){
 }
 
 let state = {
-  loaded:false, currentPlayer:null, predictions:{}, results:{},
+  loaded:false, currentPlayer:null, predictions:{}, results:{}, scores:{},
   players:[], playerAuth:{}, playerAvatars:{}, predictionsLocked:{}, pendingPrediction:{},
   tab:'matches', filter:'upcoming',
   openDays:new Set(),
@@ -246,11 +246,12 @@ async function init(){
     render();
     return;
   }
-  const [pred, res, playersRaw, authRaw, lockedRaw, avatarsRaw] = await Promise.all([
-    fbGet('predictions'), fbGet('results'), fbGet('players'), fbGet('playerAuth'), fbGet('predictionsLocked'), fbGet('playerAvatars')
+  const [pred, res, scoresRaw, playersRaw, authRaw, lockedRaw, avatarsRaw] = await Promise.all([
+    fbGet('predictions'), fbGet('results'), fbGet('scores'), fbGet('players'), fbGet('playerAuth'), fbGet('predictionsLocked'), fbGet('playerAvatars')
   ]);
   state.predictions = pred || {};
   state.results = res || {};
+  state.scores = scoresRaw || {};
   state.predictionsLocked = lockedRaw || {};
   state.playerAvatars = avatarsRaw || {};
   state.currentPlayer = localStorage.getItem('currentPlayer') || null;
@@ -520,7 +521,9 @@ function renderDynHTML(m){
   // --- result row (read-only, auto-updated) ---
   if (actual){
     const label = actual==='draw' ? 'Hòa' : (actual==='team1'? m.team1 : m.team2);
-    html += `<div class="result-row"><div class="result-banner">KẾT QUẢ: ${label}${actual==='draw'?'':' thắng'}</div></div>`;
+    const score = state.scores[m.id];
+    const scoreTxt = score ? ` (${score})` : '';
+    html += `<div class="result-row"><div class="result-banner">KẾT QUẢ: ${m.team1} ${score || '?'} ${m.team2}</div></div>`;
   } else {
     html += `<div class="result-row"><div class="result-banner" style="color:var(--chalk-dim);font-weight:500;">Chưa có kết quả</div></div>`;
   }
