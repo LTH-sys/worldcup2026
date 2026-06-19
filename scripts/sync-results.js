@@ -59,6 +59,7 @@ async function main() {
   fixtures.sort((a, b) => new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime());
 
   const existingResults = (await fbGet("results")) || {};
+  const existingScores = (await fbGet("scores")) || {};
   let updated = 0;
   const n = Math.min(MATCHES.length, fixtures.length);
 
@@ -78,16 +79,21 @@ async function main() {
     else outcome = "draw";
 
     existingResults[ours.id] = outcome;
-    updated++;
+
     const ft = fx.score && fx.score.fullTime ? fx.score.fullTime : {};
+    if (ft.home !== null && ft.home !== undefined && ft.away !== null && ft.away !== undefined) {
+      existingScores[ours.id] = `${ft.home} - ${ft.away}`;
+    }
+
+    updated++;
     console.log(
       `Trận #${ours.id} [${ours.team1} vs ${ours.team2}] <-> API [${fx.homeTeam.name} ${ft.home}-${ft.away} ${fx.awayTeam.name}, winner=${winner}] => ${outcome}`
     );
   }
 
   if (updated > 0) {
-    await fbSet("results", existingResults);
-    console.log(`✅ Đã cập nhật ${updated} kết quả mới vào Firebase.`);
+    await Promise.all([fbSet("results", existingResults), fbSet("scores", existingScores)]);
+    console.log(`✅ Đã cập nhật ${updated} kết quả + tỷ số mới vào Firebase.`);
   } else {
     console.log("Không có kết quả mới nào để cập nhật ở lần chạy này.");
   }
@@ -97,4 +103,3 @@ main().catch((err) => {
   console.error("Lỗi:", err.message);
   process.exit(1);
 });
-
