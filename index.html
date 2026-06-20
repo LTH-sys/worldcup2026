@@ -179,6 +179,19 @@ button{font-family:inherit;}
 .banana-pot .pot-label{font-size:12px;color:var(--chalk-dim);margin-top:2px;}
 .banana-pot .pot-emoji{font-size:28px;margin-bottom:4px;}
 
+/* honour cards */
+.honour-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.honour-card{background:var(--pitch-light);border-radius:14px;padding:14px 10px;text-align:center;border:1px solid var(--line);}
+.honour-card.banana{border-color:rgba(217,164,65,.4);}
+.honour-card.prophet{border-color:rgba(111,207,151,.4);}
+.honour-card .hc-icon{font-size:28px;margin-bottom:4px;line-height:1;}
+.honour-card .hc-title{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--chalk-dim);margin-bottom:6px;}
+.honour-card .hc-name{font-size:15px;font-weight:700;color:var(--chalk);line-height:1.2;}
+.honour-card .hc-badge{display:inline-block;margin-top:4px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;}
+.honour-card.banana .hc-badge{background:rgba(217,164,65,.2);color:var(--gold);}
+.honour-card.prophet .hc-badge{background:rgba(111,207,151,.2);color:var(--mint);}
+.honour-card .hc-stat{font-size:11px;color:var(--chalk-dim);margin-top:4px;}
+
 /* ---------- player history ---------- */
 .hist-modal{position:fixed;inset:0;z-index:50;background:var(--ink);display:flex;flex-direction:column;}
 .hist-header{position:sticky;top:0;background:var(--ink);border-bottom:1px solid var(--line);padding:14px 16px;display:flex;align-items:center;gap:12px;}
@@ -860,6 +873,36 @@ function renderLeaderboardTab(){
   if (state.viewingPlayer) return renderPlayerHistory();
   const rows = computeStats();
   const totalChuoi = rows.reduce((s,r)=>s+r.chuoi, 0);
+
+  // Chuối Vương: most wrong predictions (most bananas)
+  const withPicks = rows.filter(r=>r.total>0);
+  const chuoiVuong = withPicks.length ? withPicks[0] : null; // rows already sorted by wrong desc
+
+  // Nhà tiên tri: most correct predictions (min 1 pick)
+  const prophetRows = [...rows].sort((a,b)=>b.correct-a.correct || b.total-a.total);
+  const prophet = prophetRows.find(r=>r.correct>0) || null;
+
+  const honourCards = `<div class="honour-cards">
+    <div class="honour-card banana" onclick="${chuoiVuong?`viewPlayer('${chuoiVuong.name}')`:''}">
+      <div class="hc-icon">🍌👑</div>
+      <div class="hc-title">Chuối Vương</div>
+      ${chuoiVuong
+        ? `<div class="hc-name">${getAvatar(chuoiVuong.name)} ${chuoiVuong.name}</div>
+           <div class="hc-badge">🍌 ${chuoiVuong.chuoi} chuối nợ</div>
+           <div class="hc-stat">${chuoiVuong.wrong} trận đoán sai</div>`
+        : `<div class="hc-name" style="color:var(--chalk-dim);font-size:12px;">Chưa có dữ liệu</div>`}
+    </div>
+    <div class="honour-card prophet" onclick="${prophet?`viewPlayer('${prophet.name}')`:''}">
+      <div class="hc-icon">🔮🧙</div>
+      <div class="hc-title">Nhà Tiên Tri</div>
+      ${prophet
+        ? `<div class="hc-name">${getAvatar(prophet.name)} ${prophet.name}</div>
+           <div class="hc-badge">✨ ${prophet.correct} trận đúng</div>
+           <div class="hc-stat">${prophet.total>0?Math.round(prophet.correct/prophet.total*100):0}% chính xác</div>`
+        : `<div class="hc-name" style="color:var(--chalk-dim);font-size:12px;">Chưa có dữ liệu</div>`}
+    </div>
+  </div>`;
+
   return `<div class="lb-wrap">
     <div class="lb-add-row"><button class="lb-add-btn" onclick="openCreateModal()">+ Thêm người chơi</button></div>
     <div class="banana-pot">
@@ -867,13 +910,18 @@ function renderLeaderboardTab(){
       <div class="pot-num">${totalChuoi} chuối</div>
       <div class="pot-label">Tổng quỹ chuối của cả nhóm</div>
     </div>
+    ${honourCards}
     <div class="lb-head">Mỗi trận đoán sai = 20 chuối đóng góp vào quỹ · Bấm vào tên để xem lịch sử</div>
     ${rows.map((r,i)=>{
+      const isChuoiVuong = chuoiVuong && r.name===chuoiVuong.name && r.wrong>0;
+      const isProphet = prophet && r.name===prophet.name && r.correct>0;
+      const badges = [isChuoiVuong?'🍌👑 Chuối Vương':'', isProphet?'🔮🧙 Nhà Tiên Tri':''].filter(Boolean).join(' · ');
       const bananaIcons = '🍌'.repeat(Math.min(r.wrong, 30));
       return `<div class="lb-row" onclick="viewPlayer('${r.name}')" style="cursor:pointer;">
       <div class="lb-rank">${i+1}</div>
       <div class="lb-mid">
-        <div class="lb-name">${getAvatar(r.name)} ${r.name}</div>
+        <div class="lb-name">${getAvatar(r.name)} ${r.name}${badges?` <span style="font-size:11px;color:var(--gold);">${badges}</span>`:''}
+        </div>
         <div class="lb-bar-track"><div class="lb-bar-fill" style="width:${r.bar}%"></div></div>
         ${r.wrong>0?`<div class="lb-bananas">${bananaIcons}</div>`:''}
       </div>
