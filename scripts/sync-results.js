@@ -53,20 +53,13 @@ async function fetchFixtures() {
 async function main() {
   console.log(`Đang lấy danh sách trận từ football-data.org...`);
   const fixtures = await fetchFixtures();
-  console.log(`Nhận được ${fixtures.length} trận từ API (mong đợi tối đa 104, có thể ít hơn nếu vòng loại trực tiếp chưa được thêm).`);
-
-  // Sắp xếp theo thời gian thi đấu để khớp vị trí với matches.json (cũng đã theo thứ tự thời gian)
-  fixtures.sort((a, b) => new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime());
+  console.log(`Nhận được ${fixtures.length} trận từ API.`);
 
   const existingResults = (await fbGet("results")) || {};
   const existingScores = (await fbGet("scores")) || {};
   let updated = 0;
-  const n = Math.min(MATCHES.length, fixtures.length);
 
-  for (let i = 0; i < n; i++) {
-    const ours = MATCHES[i];
-    const fx = fixtures[i];
-
+  for (const fx of fixtures) {
     if (!FINISHED_STATUSES.has(fx.status)) continue;
 
     const winner = fx.score && fx.score.winner;
@@ -75,7 +68,52 @@ async function main() {
     const ft = fx.score && fx.score.fullTime ? fx.score.fullTime : {};
     const hasScore = ft.home !== null && ft.home !== undefined && ft.away !== null && ft.away !== undefined;
 
-    // Ghi kết quả thắng/thua nếu chưa có
+    // Bảng dịch tên đội VN sang tên API tiếng Anh
+    const VN_TO_EN = {
+      "Thổ Nhĩ Kỳ":"turkiye","Bờ Biển Ngà":"ivory coast","Nam Phi":"south africa",
+      "Hàn Quốc":"south korea","Séc":"czechia","Bosnia & Herzegovina":"bosnia",
+      "Hà Lan":"netherlands","Nhật Bản":"japan","Thụy Sĩ":"switzerland",
+      "Thụy Điển":"sweden","Tây Ban Nha":"spain","Ả Rập Saudi":"saudi arabia",
+      "Na Uy":"norway","Pháp":"france","Argentina":"argentina","Brazil":"brazil",
+      "Đức":"germany","Bỉ":"belgium","Anh":"england","Áo":"austria",
+      "Algeria":"algeria","Jordan":"jordan","Portugal":"portugal",
+      "CHDC Congo":"dr congo","Uzbekistan":"uzbekistan","Colombia":"colombia",
+      "Mexico":"mexico","Mỹ":"usa","Canada":"canada","Australia":"australia",
+      "Qatar":"qatar","Iran":"iran","Egypt":"egypt","Ghana":"ghana",
+      "Panama":"panama","Croatia":"croatia","Scotland":"scotland",
+      "Morocco":"morocco","Haiti":"haiti","Iraq":"iraq","Senegal":"senegal",
+      "Ecuador":"ecuador","Curaçao":"curacao","Tunisia":"tunisia",
+      "Uruguay":"uruguay","Cabo Verde":"cabo verde","New Zealand":"new zealand",
+      "Paraguay":"paraguay",
+    };
+
+    const normalize = (s) => (s || "").toLowerCase()
+      .replace(/ü/g,"u").replace(/ú/g,"u").replace(/û/g,"u")
+      .replace(/é/g,"e").replace(/ê/g,"e")
+      .replace(/á/g,"a").replace(/â/g,"a").replace(/ã/g,"a")
+      .replace(/ó/g,"o").replace(/ô/g,"o")
+      .replace(/í/g,"i").replace(/ç/g,"c")
+      .replace(/türkiye/g,"turkiye")
+      .replace(/[^a-z0-9 ]/g,"").trim();
+
+    const vnNorm = (vn) => normalize(VN_TO_EN[vn] || vn);
+
+    const apiHome = normalize(fx.homeTeam.name);
+    const apiAway = normalize(fx.awayTeam.name);
+
+    // Tìm trận khớp theo tên đội
+    const ours = MATCHES.find(m => {
+      const t1 = vnNorm(m.team1);
+      const t2 = vnNorm(m.team2);
+      return (t1 === apiHome || apiHome.includes(t1) || t1.includes(apiHome)) &&
+             (t2 === apiAway || apiAway.includes(t2) || t2.includes(apiAway));
+    });
+
+    if (!ours) {
+      console.log(`Không tìm thấy trận: ${fx.homeTeam.name} vs ${fx.awayTeam.name}`);
+      continue;
+    }
+
     if (!existingResults[ours.id]) {
       let outcome;
       if (winner === "HOME_TEAM") outcome = "team1";
@@ -85,16 +123,16 @@ async function main() {
       updated++;
     }
 
-    // Ghi tỷ số nếu chưa có (kể cả khi kết quả đã có từ trước)
     if (hasScore && !existingScores[ours.id]) {
       existingScores[ours.id] = `${ft.home} - ${ft.away}`;
       updated++;
     }
 
-    if (!existingResults[ours.id] || !existingScores[ours.id]) continue;
-    console.log(
-      `Trận #${ours.id} [${ours.team1} vs ${ours.team2}] <-> API [${fx.homeTeam.name} ${ft.home}-${ft.away} ${fx.awayTeam.name}] => ${existingResults[ours.id]}, tỷ số: ${existingScores[ours.id]}`
-    );
+    if (existingResults[ours.id] && existingScores[ours.id]) {
+      console.log(
+        `Trận #${ours.id} [${ours.team1} vs ${ours.team2}] <-> API [${fx.homeTeam.name} ${ft.home}-${ft.away} ${fx.awayTeam.name}] => ${existingResults[ours.id]}, tỷ số: ${existingScores[ours.id]}`
+      );
+    }
   }
 
   if (updated > 0) {
