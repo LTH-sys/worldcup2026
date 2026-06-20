@@ -145,6 +145,19 @@ button{font-family:inherit;}
 .admin-confirm-box .cf-yes{background:var(--coral);color:#fff;}
 .admin-confirm-box .cf-no{background:rgba(244,241,234,.1);color:var(--chalk);}
 
+/* admin manual entry */
+.admin-entry-btn{width:100%;background:var(--pitch);border:1.5px solid var(--gold);color:var(--gold);border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px;}
+.admin-match-list{display:flex;flex-direction:column;gap:8px;margin-top:10px;max-height:60vh;overflow-y:auto;}
+.admin-match-item{background:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+.admin-match-item .ami-teams{font-size:13px;font-weight:600;margin-bottom:6px;}
+.admin-match-item .ami-meta{font-size:11px;color:var(--chalk-dim);margin-bottom:8px;}
+.ami-score-row{display:flex;gap:6px;align-items:center;margin-bottom:6px;}
+.ami-score-input{width:44px;background:var(--pitch-light);border:1.5px solid var(--line);border-radius:7px;padding:6px 4px;color:var(--chalk);font-size:16px;font-weight:700;text-align:center;}
+.ami-score-input:focus{outline:none;border-color:var(--gold);}
+.ami-sep{font-size:16px;color:var(--chalk-dim);}
+.ami-save-btn{flex:1;background:var(--gold);color:var(--ink);border:none;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;}
+.ami-saved{font-size:11px;color:var(--mint);font-weight:600;}
+
 /* ---------- leaderboard ---------- */
 .lb-wrap{padding:14px;}
 .lb-head{font-size:13px;color:var(--chalk-dim);margin-bottom:14px;}
@@ -165,6 +178,30 @@ button{font-family:inherit;}
 .banana-pot .pot-num{font-family:'Teko',sans-serif;font-size:42px;font-weight:700;color:var(--gold);line-height:1;}
 .banana-pot .pot-label{font-size:12px;color:var(--chalk-dim);margin-top:2px;}
 .banana-pot .pot-emoji{font-size:28px;margin-bottom:4px;}
+
+/* ---------- player history ---------- */
+.hist-modal{position:fixed;inset:0;z-index:50;background:var(--ink);display:flex;flex-direction:column;}
+.hist-header{position:sticky;top:0;background:var(--ink);border-bottom:1px solid var(--line);padding:14px 16px;display:flex;align-items:center;gap:12px;}
+.hist-back{background:none;border:1px solid var(--line);color:var(--chalk);border-radius:20px;padding:5px 12px;font-size:13px;cursor:pointer;}
+.hist-title{font-size:18px;font-weight:700;}
+.hist-summary{display:flex;gap:10px;padding:14px 16px;background:var(--pitch-light);}
+.hist-stat{flex:1;text-align:center;}
+.hist-stat .hs-num{font-family:'Teko',sans-serif;font-size:28px;font-weight:700;line-height:1;}
+.hist-stat .hs-lbl{font-size:10.5px;color:var(--chalk-dim);}
+.hist-body{flex:1;overflow-y:auto;padding:10px 14px 30px;}
+.hist-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
+.hist-item:last-child{border-bottom:none;}
+.hist-result-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
+.hist-result-dot.correct{background:var(--mint);}
+.hist-result-dot.wrong{background:var(--coral);}
+.hist-result-dot.pending{background:var(--chalk-dim);}
+.hist-match{flex:1;min-width:0;}
+.hist-match .hm-teams{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hist-match .hm-meta{font-size:11px;color:var(--chalk-dim);margin-top:2px;}
+.hist-pick{text-align:right;font-size:12px;font-weight:600;flex:0 0 auto;}
+.hist-pick.correct{color:var(--mint);}
+.hist-pick.wrong{color:var(--coral);}
+.hist-pick.pending{color:var(--chalk-dim);}
 
 .loading{flex:1;display:flex;align-items:center;justify-content:center;color:var(--chalk-dim);font-size:13px;}
 .empty-state{text-align:center;color:var(--chalk-dim);font-size:13px;padding:40px 20px;}
@@ -229,7 +266,8 @@ let state = {
   tab:'matches', filter:'upcoming',
   openDays:new Set(),
   authModal:null, authError:'', configError:false,
-  isAdmin:false, adminConfirm:null,
+  isAdmin:false, adminConfirm:null, adminManualEntry:false, adminSaved:{},
+  viewingPlayer:null,
 };
 
 // ====== CẤU HÌNH FIREBASE — DÁN LINK REALTIME DATABASE CỦA BẠN VÀO DÒNG DƯỚI ======
@@ -465,6 +503,33 @@ async function doAdminLogin(pin){
   render();
 }
 
+// ---- admin manual score entry ----
+function toggleManualEntry(){
+  state.adminManualEntry = !state.adminManualEntry;
+  render();
+}
+
+async function saveManualScore(matchId){
+  const m = MATCHES.find(x=>x.id===matchId);
+  const h = parseInt(document.getElementById(`ami-h-${matchId}`).value);
+  const a = parseInt(document.getElementById(`ami-a-${matchId}`).value);
+  if (isNaN(h) || isNaN(a) || h < 0 || a < 0){ alert('Tỷ số không hợp lệ'); return; }
+  const scoreStr = `${h} - ${a}`;
+  let outcome;
+  if (h > a) outcome = 'team1';
+  else if (a > h) outcome = 'team2';
+  else outcome = 'draw';
+  const [latestResults, latestScores] = await Promise.all([fbGet('results'), fbGet('scores')]);
+  state.results = latestResults || {};
+  state.scores = latestScores || {};
+  state.results[matchId] = outcome;
+  state.scores[matchId] = scoreStr;
+  await Promise.all([fbSet('results', state.results), fbSet('scores', state.scores)]);
+  state.adminSaved = state.adminSaved || {};
+  state.adminSaved[matchId] = true;
+  render();
+}
+
 function askResetConfirm(type){
   state.adminConfirm = type;
   render();
@@ -489,6 +554,65 @@ async function doReset(type){
   render();
 }
 
+function viewPlayer(name){
+  state.viewingPlayer = name;
+  render();
+}
+function closePlayerHistory(){
+  state.viewingPlayer = null;
+  render();
+}
+
+function renderPlayerHistory(){
+  const name = state.viewingPlayer;
+  const CHUOI_PER_LOSS = 20;
+  let correct=0, wrong=0, total=0;
+  const items = MATCHES.map(m=>{
+    const pick = (state.predictions[m.id]||{})[name];
+    if (!pick) return null;
+    const actual = getActualResult(m);
+    const score = state.scores[m.id] || m.score;
+    let status = 'pending';
+    if (actual){ status = pick===actual ? 'correct' : 'wrong'; }
+    if (status==='correct') correct++;
+    if (status==='wrong') wrong++;
+    total++;
+    const pickLabel = pick==='draw' ? 'Hòa' : (pick==='team1'? m.team1 : m.team2);
+    return {m, pick, pickLabel, actual, score, status};
+  }).filter(Boolean);
+
+  return `<div class="hist-modal">
+    <div class="hist-header">
+      <button class="hist-back" onclick="closePlayerHistory()">← Quay lại</button>
+      <div class="hist-title">${getAvatar(name)} ${name}</div>
+    </div>
+    <div class="hist-summary">
+      <div class="hist-stat"><div class="hs-num" style="color:var(--mint)">${correct}</div><div class="hs-lbl">Đúng</div></div>
+      <div class="hist-stat"><div class="hs-num" style="color:var(--coral)">${wrong}</div><div class="hs-lbl">Sai</div></div>
+      <div class="hist-stat"><div class="hs-num" style="color:var(--gold)">${wrong*CHUOI_PER_LOSS} 🍌</div><div class="hs-lbl">Chuối nợ</div></div>
+      <div class="hist-stat"><div class="hs-num">${total}</div><div class="hs-lbl">Đã dự đoán</div></div>
+    </div>
+    <div class="hist-body">
+      ${items.length===0 ? '<div class="empty-state">Chưa có dự đoán nào.</div>' :
+        items.map(({m,pickLabel,score,status})=>{
+          const scoreStr = score ? ` (${score})` : '';
+          const actualLabel = getActualResult(m)==='draw'?'Hòa':getActualResult(m)==='team1'?m.team1:m.team2;
+          return `<div class="hist-item">
+            <div class="hist-result-dot ${status}"></div>
+            <div class="hist-match">
+              <div class="hm-teams">${m.team1} vs ${m.team2}${scoreStr}</div>
+              <div class="hm-meta">${m.date.slice(8,10)}/${m.date.slice(5,7)} · ${m.stage}${m.group?' · Bảng '+m.group:''}</div>
+            </div>
+            <div class="hist-pick ${status}">
+              ${pickLabel}
+              ${status!=='pending'?`<br><span style="font-size:10px;font-weight:400;">${status==='correct'?'✓ Đúng':'✗ Sai'}</span>`:''}
+            </div>
+          </div>`;
+        }).join('')}
+    </div>
+  </div>`;
+}
+
 function renderAdminPanel(){
   if (!state.isAdmin) return '';
   const confirms = {
@@ -508,9 +632,38 @@ function renderAdminPanel(){
     }
     return `<button class="admin-reset-btn" onclick="askResetConfirm('${type}')">${label}</button>`;
   }
+
+  let manualEntryHTML = '';
+  if (state.adminManualEntry){
+    const playedOrAll = MATCHES.filter(m => !isPlaceholder(m.team1) && !isPlaceholder(m.team2));
+    manualEntryHTML = `<div class="admin-match-list">` +
+      playedOrAll.map(m => {
+        const existing = state.scores[m.id] || m.score || '';
+        const parts = existing.match(/(\d+)\s*-\s*(\d+)/);
+        const hVal = parts ? parts[1] : '';
+        const aVal = parts ? parts[2] : '';
+        const saved = state.adminSaved && state.adminSaved[m.id];
+        return `<div class="admin-match-item">
+          <div class="ami-teams">${m.team1} vs ${m.team2}</div>
+          <div class="ami-meta">${m.date.slice(8,10)}/${m.date.slice(5,7)} ${m.time} · ${m.stage}${m.group?' Bảng '+m.group:''}</div>
+          <div class="ami-score-row">
+            <input class="ami-score-input" id="ami-h-${m.id}" type="number" min="0" max="99" value="${hVal}" placeholder="0">
+            <span class="ami-sep">–</span>
+            <input class="ami-score-input" id="ami-a-${m.id}" type="number" min="0" max="99" value="${aVal}" placeholder="0">
+            <button class="ami-save-btn" onclick="saveManualScore(${m.id})">💾 Lưu</button>
+            ${saved ? `<span class="ami-saved">✓ Đã lưu</span>` : ''}
+          </div>
+        </div>`;
+      }).join('') + `</div>`;
+  }
+
   return `<div class="admin-panel">
     <div class="admin-title">🔧 Bảng điều khiển Admin</div>
-    <div class="admin-desc">Reset dữ liệu trước khi bắt đầu mùa giải mới hoặc khi cần làm lại từ đầu.</div>
+    <div class="admin-desc">Nhập tỷ số thủ công hoặc reset dữ liệu.</div>
+    <button class="admin-entry-btn" onclick="toggleManualEntry()">
+      ✏️ ${state.adminManualEntry ? 'Đóng nhập tỷ số thủ công' : 'Nhập tỷ số thủ công'}
+    </button>
+    ${manualEntryHTML}
     ${resetBtn('predictions','🗑️ Reset tất cả dự đoán')}
     ${resetBtn('results','🗑️ Reset tất cả kết quả & tỷ số')}
     ${resetBtn('all','💣 Reset toàn bộ (dự đoán + kết quả)')}
@@ -704,9 +857,9 @@ function computeStats(){
 }
 
 function renderLeaderboardTab(){
+  if (state.viewingPlayer) return renderPlayerHistory();
   const rows = computeStats();
   const totalChuoi = rows.reduce((s,r)=>s+r.chuoi, 0);
-  const totalMatches = rows.length>0 ? rows[0].total : 0; // all players see same number of finished matches
   return `<div class="lb-wrap">
     <div class="lb-add-row"><button class="lb-add-btn" onclick="openCreateModal()">+ Thêm người chơi</button></div>
     <div class="banana-pot">
@@ -714,10 +867,10 @@ function renderLeaderboardTab(){
       <div class="pot-num">${totalChuoi} chuối</div>
       <div class="pot-label">Tổng quỹ chuối của cả nhóm</div>
     </div>
-    <div class="lb-head">Mỗi trận đoán sai = 20 chuối đóng góp vào quỹ</div>
+    <div class="lb-head">Mỗi trận đoán sai = 20 chuối đóng góp vào quỹ · Bấm vào tên để xem lịch sử</div>
     ${rows.map((r,i)=>{
       const bananaIcons = '🍌'.repeat(Math.min(r.wrong, 30));
-      return `<div class="lb-row">
+      return `<div class="lb-row" onclick="viewPlayer('${r.name}')" style="cursor:pointer;">
       <div class="lb-rank">${i+1}</div>
       <div class="lb-mid">
         <div class="lb-name">${getAvatar(r.name)} ${r.name}</div>
