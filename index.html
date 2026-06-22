@@ -940,22 +940,11 @@ function isAfterRule2Start(m){
 
 // Tính năng 2 & 3: kiểm tra trận đã bắt đầu chưa (theo giờ VN)
 function isMatchStarted(m){
-  const now = new Date();
-  const vnNow = new Date(now.toLocaleString('en-US', {timeZone:'Asia/Ho_Chi_Minh'}));
+  // Giờ trận đấu là giờ VN (UTC+7) -> chuyển về UTC để so sánh chính xác
   const [h, min] = m.time.split(':').map(Number);
-  const matchStart = new Date(m.date + 'T00:00:00');
-  matchStart.setHours(h, min, 0, 0);
-  // So sánh theo giờ VN: tạo date bằng cách dùng giá trị giờ VN
-  const vnYear = parseInt(m.date.slice(0,4));
-  const vnMonth = parseInt(m.date.slice(5,7)) - 1;
-  const vnDay = parseInt(m.date.slice(8,10));
-  const matchVN = new Date(vnYear, vnMonth, vnDay, h, min, 0);
-  // Lấy offset VN hiện tại
-  const vnOffset = 7 * 60; // UTC+7
-  const localOffset = -now.getTimezoneOffset();
-  const diffMin = vnOffset - localOffset;
-  const matchUTC = new Date(matchVN.getTime() - diffMin * 60000);
-  return now >= matchUTC;
+  const [y, mo, d] = m.date.split('-').map(Number);
+  const matchUTC = Date.UTC(y, mo-1, d, h-7, min, 0);
+  return Date.now() >= matchUTC;
 }
 
 function renderDynHTML(m){
@@ -988,23 +977,25 @@ function renderDynHTML(m){
   }
 
   // --- avatars row ---
-  // Tính năng 3: chỉ hiện dự đoán của người khác khi trận đã có kết quả HOẶC đã bắt đầu
-  const showOthersPicks = actual || started;
+  // Tính năng 3: chỉ hiện dự đoán của người khác khi trận ĐÃ BẮT ĐẦU hoặc đã có kết quả
+  // Người đang đăng nhập luôn thấy dự đoán của chính mình
+  const showOthersPicks = started || !!actual;
   const picks = state.predictions[m.id] || {};
   html += `<div class="avatars">` + state.players.map(p=>{
     const isMe = p === state.currentPlayer;
-    // Với người khác: chỉ hiện dự đoán khi trận đã bắt đầu hoặc có kết quả
     const pk = (isMe || showOthersPicks) ? picks[p] : null;
-    // Tính sai nếu trận đã có kết quả và người đó chưa đặt cược (tính năng 2)
-    const noPickAndDone = actual && !picks[p];
+    const noPickAndDone = !!actual && !picks[p] && isAfterRule2Start(m);
     let cls = 'avt';
     if (pk){
       cls += ' picked';
       if (actual){ cls += (pk===actual? ' correct':' wrong'); }
     } else if (noPickAndDone){
-      cls += ' wrong'; // chưa chọn = sai
+      cls += ' wrong';
     }
-    const pickInfo = pk ? (': '+(pk==='draw'?'Hòa':(pk==='team1'?m.team1:m.team2))) : (noPickAndDone?' (không dự đoán)':'');
+    // Tooltip: ẩn dự đoán người khác khi chưa bắt đầu
+    const pickInfo = (!isMe && !showOthersPicks) ? ''
+      : pk ? (': '+(pk==='draw'?'Hòa':(pk==='team1'?m.team1:m.team2)))
+      : noPickAndDone ? ' (không dự đoán)' : '';
     return `<div class="${cls}" title="${p}${pickInfo}">${getAvatar(p)}</div>`;
   }).join('') + `</div>`;
 
