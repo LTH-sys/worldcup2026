@@ -929,11 +929,41 @@ function pickButtons(m, current, onPick, cls){
   </div>` + (disabled?`<div class="placeholder-note">Chưa xác định đội — chờ kết quả vòng trước</div>`:'');
 }
 
+// Tính năng 2 chỉ áp dụng từ trận Argentina vs Áo (00:00 VN ngày 23/06/2026) trở đi
+const RULE2_START = {date:'2026-06-23', time:'00:00'};
+
+function isAfterRule2Start(m){
+  if (m.date > RULE2_START.date) return true;
+  if (m.date < RULE2_START.date) return false;
+  return m.time >= RULE2_START.time;
+}
+
+// Tính năng 2 & 3: kiểm tra trận đã bắt đầu chưa (theo giờ VN)
+function isMatchStarted(m){
+  const now = new Date();
+  const vnNow = new Date(now.toLocaleString('en-US', {timeZone:'Asia/Ho_Chi_Minh'}));
+  const [h, min] = m.time.split(':').map(Number);
+  const matchStart = new Date(m.date + 'T00:00:00');
+  matchStart.setHours(h, min, 0, 0);
+  // So sánh theo giờ VN: tạo date bằng cách dùng giá trị giờ VN
+  const vnYear = parseInt(m.date.slice(0,4));
+  const vnMonth = parseInt(m.date.slice(5,7)) - 1;
+  const vnDay = parseInt(m.date.slice(8,10));
+  const matchVN = new Date(vnYear, vnMonth, vnDay, h, min, 0);
+  // Lấy offset VN hiện tại
+  const vnOffset = 7 * 60; // UTC+7
+  const localOffset = -now.getTimezoneOffset();
+  const diffMin = vnOffset - localOffset;
+  const matchUTC = new Date(matchVN.getTime() - diffMin * 60000);
+  return now >= matchUTC;
+}
+
 function renderDynHTML(m){
   const myPick = state.currentPlayer ? (state.predictions[m.id]||{})[state.currentPlayer] : null;
   const myLocked = isMyPredictionLocked(m.id);
   const pending = state.pendingPrediction[m.id];
   const actual = getActualResult(m);
+  const started = isMatchStarted(m);
   let html = '';
 
   // --- prediction section ---
@@ -942,6 +972,9 @@ function renderDynHTML(m){
   } else if (myLocked){
     const lockLabel = myPick==='draw' ? 'Hòa' : (myPick==='team1'? m.team1 : m.team2);
     html += `<div class="placeholder-note" style="color:var(--mint);">🔒 Bạn đã chọn: <b>${lockLabel}</b></div>`;
+  } else if (started && isAfterRule2Start(m)){
+    // Tính năng 2: trận đã bắt đầu mà chưa chọn = tính như sai (chỉ từ 23/06 trở đi)
+    html += `<div class="placeholder-note" style="color:var(--coral);">⏰ Hết giờ dự đoán — tính như đoán sai</div>`;
   } else {
     const selFn = `__onsel_${m.id}`;
     window[selFn] = (v)=>selectPendingPrediction(m.id, v);
@@ -955,20 +988,28 @@ function renderDynHTML(m){
   }
 
   // --- avatars row ---
+  // Tính năng 3: chỉ hiện dự đoán của người khác khi trận đã có kết quả HOẶC đã bắt đầu
+  const showOthersPicks = actual || started;
   const picks = state.predictions[m.id] || {};
   html += `<div class="avatars">` + state.players.map(p=>{
-    const pk = picks[p];
+    const isMe = p === state.currentPlayer;
+    // Với người khác: chỉ hiện dự đoán khi trận đã bắt đầu hoặc có kết quả
+    const pk = (isMe || showOthersPicks) ? picks[p] : null;
+    // Tính sai nếu trận đã có kết quả và người đó chưa đặt cược (tính năng 2)
+    const noPickAndDone = actual && !picks[p];
     let cls = 'avt';
     if (pk){
       cls += ' picked';
       if (actual){ cls += (pk===actual? ' correct':' wrong'); }
+    } else if (noPickAndDone){
+      cls += ' wrong'; // chưa chọn = sai
     }
-    return `<div class="${cls}" title="${p}${pk? (': '+(pk==='draw'?'Hòa':(pk==='team1'?m.team1:m.team2))):''}">${getAvatar(p)}</div>`;
+    const pickInfo = pk ? (': '+(pk==='draw'?'Hòa':(pk==='team1'?m.team1:m.team2))) : (noPickAndDone?' (không dự đoán)':'');
+    return `<div class="${cls}" title="${p}${pickInfo}">${getAvatar(p)}</div>`;
   }).join('') + `</div>`;
 
   // --- result row (read-only, auto-updated) ---
   if (actual){
-    const label = actual==='draw' ? 'Hòa' : (actual==='team1'? m.team1 : m.team2);
     const score = state.scores[m.id] || m.score;
     html += `<div class="result-row"><div class="result-banner">KẾT QUẢ: ${m.team1} ${score || '?'} ${m.team2}</div></div>`;
   } else {
@@ -1033,10 +1074,15 @@ function computeStats(){
     if (!actual) return;
     const picks = state.predictions[m.id] || {};
     state.players.forEach(p=>{
-      if (picks[p]){
+      const pick = picks[p];
+      if (pick){
         stats[p].total++;
-        if (picks[p]===actual) stats[p].correct++;
+        if (pick===actual) stats[p].correct++;
         else stats[p].wrong++;
+      } else if (isAfterRule2Start(m)){
+        // Tính năng 2: không dự đoán trước giờ bóng lăn = tính sai (chỉ từ Argentina vs Áo 23/06)
+        stats[p].total++;
+        stats[p].wrong++;
       }
     });
   });
