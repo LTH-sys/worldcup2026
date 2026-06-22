@@ -685,12 +685,18 @@ function closePlayerHistory(){
 
 function renderPlayerHistory(){
   const name = state.viewingPlayer;
+  const isOwnHistory = name === state.currentPlayer;
   const CHUOI_PER_LOSS = 20;
   let correct=0, wrong=0, total=0;
   const items = MATCHES.map(m=>{
     const pick = (state.predictions[m.id]||{})[name];
-    if (!pick) return null;
     const actual = getActualResult(m);
+    const started = isMatchStarted(m);
+
+    // Tính năng 3: ẩn dự đoán người khác khi trận chưa bắt đầu
+    if (!isOwnHistory && !started && !actual) return null;
+
+    if (!pick) return null;
     const score = state.scores[m.id] || m.score;
     let status = 'pending';
     if (actual){ status = pick===actual ? 'correct' : 'wrong'; }
@@ -713,7 +719,8 @@ function renderPlayerHistory(){
       <div class="hist-stat"><div class="hs-num">${total}</div><div class="hs-lbl">Đã dự đoán</div></div>
     </div>
     <div class="hist-body">
-      ${items.length===0 ? '<div class="empty-state">Chưa có dự đoán nào.</div>' :
+      ${!isOwnHistory ? `<div style="font-size:11px;color:var(--chalk-dim);padding:4px 0 10px;">🔒 Dự đoán các trận chưa bắt đầu được ẩn</div>` : ''}
+      ${items.length===0 ? '<div class="empty-state">Chưa có dự đoán nào có thể hiển thị.</div>' :
         items.map(({m,pickLabel,score,status})=>{
           const scoreStr = score ? ` (${score})` : '';
           const actualLabel = getActualResult(m)==='draw'?'Hòa':getActualResult(m)==='team1'?m.team1:m.team2;
