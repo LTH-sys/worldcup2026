@@ -988,9 +988,26 @@ function isAfterRule2Start(m){
 // - User tạo từ 23/06 trở đi: lấy ngày tạo tài khoản
 // - Người chơi cũ / không có joinDate: không giới hạn (tính từ đầu)
 const BEN_START_DATE = '2026-06-23';
+// Ngày bắt đầu tính cố định cho một số người chơi đặc biệt
+// Key: lowercase không dấu để match linh hoạt bất kể encoding
+const PLAYER_FIXED_START = {
+  'ben buong binh': '2026-06-23',
+};
+function normalizePlayerName(name){
+  return (name||'').toLowerCase()
+    .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g,'a')
+    .replace(/[èéẹẻẽêềếệểễ]/g,'e')
+    .replace(/[ìíịỉĩ]/g,'i')
+    .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g,'o')
+    .replace(/[ùúụủũưừứựửữ]/g,'u')
+    .replace(/[ỳýỵỷỹ]/g,'y')
+    .replace(/đ/g,'d')
+    .replace(/[^a-z0-9 ]/g,'').trim();
+}
+
 function getPlayerStartDate(name){
-  // Khớp cả 2 cách viết tên Ben phòng trường hợp Firebase lưu khác encoding
-  if (name === 'Ben Bướng Bình' || name === 'Ben Bướng Binh') return BEN_START_DATE;
+  const norm = normalizePlayerName(name);
+  if (PLAYER_FIXED_START[norm]) return PLAYER_FIXED_START[norm];
   const joinDate = state.playerJoinDate[name];
   if (joinDate && joinDate >= RULE2_START.date) return joinDate;
   return null; // không giới hạn
