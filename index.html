@@ -989,7 +989,8 @@ function isAfterRule2Start(m){
 // - Người chơi cũ / không có joinDate: không giới hạn (tính từ đầu)
 const BEN_START_DATE = '2026-06-23';
 function getPlayerStartDate(name){
-  if (name === 'Ben Bướng Bình') return BEN_START_DATE;
+  // Khớp cả 2 cách viết tên Ben phòng trường hợp Firebase lưu khác encoding
+  if (name === 'Ben Bướng Bình' || name === 'Ben Bướng Binh') return BEN_START_DATE;
   const joinDate = state.playerJoinDate[name];
   if (joinDate && joinDate >= RULE2_START.date) return joinDate;
   return null; // không giới hạn
