@@ -299,6 +299,7 @@ function getAvatar(name){
 let state = {
   loaded:false, currentPlayer:null, predictions:{}, results:{}, scores:{},
   players:[], playerAuth:{}, playerAvatars:{}, predictionsLocked:{}, pendingPrediction:{},
+  playerJoinDate:{},
   tab:'matches', filter:'upcoming',
   openDays:new Set(),
   authModal:null, authError:'', configError:false,
@@ -341,14 +342,15 @@ async function init(){
     render();
     return;
   }
-  const [pred, res, scoresRaw, playersRaw, authRaw, lockedRaw, avatarsRaw] = await Promise.all([
-    fbGet('predictions'), fbGet('results'), fbGet('scores'), fbGet('players'), fbGet('playerAuth'), fbGet('predictionsLocked'), fbGet('playerAvatars')
+  const [pred, res, scoresRaw, playersRaw, authRaw, lockedRaw, avatarsRaw, joinDatesRaw] = await Promise.all([
+    fbGet('predictions'), fbGet('results'), fbGet('scores'), fbGet('players'), fbGet('playerAuth'), fbGet('predictionsLocked'), fbGet('playerAvatars'), fbGet('playerJoinDate')
   ]);
   state.predictions = pred || {};
   state.results = res || {};
   state.scores = scoresRaw || {};
   state.predictionsLocked = lockedRaw || {};
   state.playerAvatars = avatarsRaw || {};
+  state.playerJoinDate = joinDatesRaw || {};
   state.currentPlayer = localStorage.getItem('currentPlayer') || null;
   state.playerAuth = authRaw || {};
 
@@ -468,6 +470,11 @@ async function doCreate(name, pw, pw2){
   state.playerAuth = latestAuth || {};
   state.playerAuth[name] = await hashPassword(pw);
   await fbSet('playerAuth', state.playerAuth);
+  // Lưu ngày tạo tài khoản (giờ VN)
+  const latestJoin = await fbGet('playerJoinDate');
+  state.playerJoinDate = latestJoin || {};
+  state.playerJoinDate[name] = vnToday();
+  await fbSet('playerJoinDate', state.playerJoinDate);
   const shouldLogin = !state.currentPlayer;
   state.authModal = null; state.authError = '';
   if (shouldLogin){ loginAs(name); }
@@ -701,10 +708,13 @@ function renderPlayerHistory(){
     const pick = (state.predictions[m.id]||{})[name];
     const actual = getActualResult(m);
     const started = isMatchStarted(m);
-    const countable = isAfterRule2Start(m); // trận áp dụng luật không dự đoán = thua
+    const countable = isAfterRule2Start(m) && isMatchCountableForPlayer(m, name); // trận áp dụng luật không dự đoán = thua
 
     // Ẩn người khác khi trận chưa bắt đầu
     if (!isOwnHistory && !started && !actual) return null;
+
+    // Bỏ qua trận trước ngày bắt đầu tính của người chơi này
+    if (!isMatchCountableForPlayer(m, name)) return null;
 
     // Trận chưa có kết quả, không có dự đoán, chưa started -> bỏ qua
     if (!pick && !actual && !started) return null;
@@ -973,6 +983,27 @@ function isAfterRule2Start(m){
   return m.time >= RULE2_START.time;
 }
 
+// Ngày bắt đầu tính kết quả cho từng người chơi
+// - Ben Bướng Bình: cố định 23/06/2026 (Argentina vs Áo)
+// - User tạo từ 23/06 trở đi: lấy ngày tạo tài khoản
+// - Người chơi cũ / không có joinDate: không giới hạn (tính từ đầu)
+const BEN_START_DATE = '2026-06-23';
+function getPlayerStartDate(name){
+  if (name === 'Ben Bướng Bình') return BEN_START_DATE;
+  const joinDate = state.playerJoinDate[name];
+  if (joinDate && joinDate >= RULE2_START.date) return joinDate;
+  return null; // không giới hạn
+}
+
+function isMatchCountableForPlayer(m, name){
+  const startDate = getPlayerStartDate(name);
+  if (!startDate) return true;
+  if (m.date > startDate) return true;
+  if (m.date < startDate) return false;
+  // cùng ngày: tính từ trận đầu tiên ngày đó (không cần khớp giờ)
+  return true;
+}
+
 // Tính năng 2 & 3: kiểm tra trận đã bắt đầu chưa (theo giờ VN)
 function isMatchStarted(m){
   // Giờ trận đấu là giờ VN (UTC+7) -> chuyển về UTC để so sánh chính xác
@@ -1019,7 +1050,7 @@ function renderDynHTML(m){
   html += `<div class="avatars">` + state.players.map(p=>{
     const isMe = p === state.currentPlayer;
     const pk = (isMe || showOthersPicks) ? picks[p] : null;
-    const noPickAndDone = !!actual && !picks[p] && isAfterRule2Start(m) && !CASUAL_PLAYERS.has(p);
+    const noPickAndDone = !!actual && !picks[p] && isAfterRule2Start(m) && !CASUAL_PLAYERS.has(p) && isMatchCountableForPlayer(m, p);
     let cls = 'avt';
     if (pk){
       cls += ' picked';
@@ -1101,6 +1132,7 @@ function computeStats(){
     const picks = state.predictions[m.id] || {};
     state.players.forEach(p=>{
       const pick = picks[p];
+      if (!isMatchCountableForPlayer(m, p)) return; // trước ngày bắt đầu của người này
       if (pick){
         stats[p].total++;
         if (pick===actual) stats[p].correct++;
