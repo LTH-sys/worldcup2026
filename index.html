@@ -696,23 +696,38 @@ function renderPlayerHistory(){
   const name = state.viewingPlayer;
   const isOwnHistory = name === state.currentPlayer;
   const CHUOI_PER_LOSS = 20;
-  let correct=0, wrong=0, total=0;
+  let correct=0, wrong=0, nopick=0, total=0;
   const items = MATCHES.map(m=>{
     const pick = (state.predictions[m.id]||{})[name];
     const actual = getActualResult(m);
     const started = isMatchStarted(m);
+    const countable = isAfterRule2Start(m); // trận áp dụng luật không dự đoán = thua
 
-    // Tính năng 3: ẩn dự đoán người khác khi trận chưa bắt đầu
+    // Ẩn người khác khi trận chưa bắt đầu
     if (!isOwnHistory && !started && !actual) return null;
 
-    if (!pick) return null;
+    // Trận chưa có kết quả, không có dự đoán, chưa started -> bỏ qua
+    if (!pick && !actual && !started) return null;
+
     const score = state.scores[m.id] || m.score;
     let status = 'pending';
-    if (actual){ status = pick===actual ? 'correct' : 'wrong'; }
-    if (status==='correct') correct++;
-    if (status==='wrong') wrong++;
-    total++;
-    const pickLabel = pick==='draw' ? 'Hòa' : (pick==='team1'? m.team1 : m.team2);
+
+    if (pick){
+      if (actual){ status = pick===actual ? 'correct' : 'wrong'; }
+      if (status==='correct') correct++;
+      if (status==='wrong') wrong++;
+      total++;
+    } else if (actual && countable){
+      // Không dự đoán trận thuộc diện áp dụng luật -> tính sai
+      status = 'nopick';
+      nopick++;
+      wrong++;
+      total++;
+    } else {
+      return null; // không dự đoán, không tính
+    }
+
+    const pickLabel = !pick ? null : (pick==='draw' ? 'Hòa' : (pick==='team1'? m.team1 : m.team2));
     return {m, pick, pickLabel, actual, score, status};
   }).filter(Boolean);
 
@@ -725,24 +740,25 @@ function renderPlayerHistory(){
       <div class="hist-stat"><div class="hs-num" style="color:var(--mint)">${correct}</div><div class="hs-lbl">Đúng</div></div>
       <div class="hist-stat"><div class="hs-num" style="color:var(--coral)">${wrong}</div><div class="hs-lbl">Sai</div></div>
       <div class="hist-stat"><div class="hs-num" style="color:var(--gold)">${wrong*CHUOI_PER_LOSS} 🍌</div><div class="hs-lbl">Chuối nợ</div></div>
-      <div class="hist-stat"><div class="hs-num">${total}</div><div class="hs-lbl">Đã dự đoán</div></div>
+      <div class="hist-stat"><div class="hs-num">${total}</div><div class="hs-lbl">Đã tính</div></div>
     </div>
     <div class="hist-body">
       ${!isOwnHistory ? `<div style="font-size:11px;color:var(--chalk-dim);padding:4px 0 10px;">🔒 Dự đoán các trận chưa bắt đầu được ẩn</div>` : ''}
-      ${items.length===0 ? '<div class="empty-state">Chưa có dự đoán nào có thể hiển thị.</div>' :
-        items.map(({m,pickLabel,score,status})=>{
+      ${items.length===0 ? '<div class="empty-state">Chưa có dữ liệu nào có thể hiển thị.</div>' :
+        items.map(({m, pickLabel, score, status})=>{
           const scoreStr = score ? ` (${score})` : '';
-          const actualLabel = getActualResult(m)==='draw'?'Hòa':getActualResult(m)==='team1'?m.team1:m.team2;
+          const isNoPick = status === 'nopick';
+          const dotClass = isNoPick ? 'wrong' : status;
+          const pickDisplay = isNoPick
+            ? `<span style="color:var(--coral);font-size:11px;font-style:italic;">Không dự đoán<br><span style="font-size:10px;">✗ Tính thua</span></span>`
+            : `${pickLabel}${status!=='pending'?`<br><span style="font-size:10px;font-weight:400;">${status==='correct'?'✓ Đúng':'✗ Sai'}</span>`:''}`;
           return `<div class="hist-item">
-            <div class="hist-result-dot ${status}"></div>
+            <div class="hist-result-dot ${dotClass}"></div>
             <div class="hist-match">
               <div class="hm-teams">${m.team1} vs ${m.team2}${scoreStr}</div>
               <div class="hm-meta">${m.date.slice(8,10)}/${m.date.slice(5,7)} · ${m.stage}${m.group?' · Bảng '+m.group:''}</div>
             </div>
-            <div class="hist-pick ${status}">
-              ${pickLabel}
-              ${status!=='pending'?`<br><span style="font-size:10px;font-weight:400;">${status==='correct'?'✓ Đúng':'✗ Sai'}</span>`:''}
-            </div>
+            <div class="hist-pick ${isNoPick?'wrong':status}">${pickDisplay}</div>
           </div>`;
         }).join('')}
     </div>
@@ -945,8 +961,8 @@ function pickButtons(m, current, onPick, cls){
   </div>` + (disabled?`<div class="placeholder-note">Chưa xác định đội — chờ kết quả vòng trước</div>`:'');
 }
 
-// Tính năng 2 chỉ áp dụng từ trận Argentina vs Áo (00:00 VN ngày 23/06/2026) trở đi
-const RULE2_START = {date:'2026-06-23', time:'00:00'};
+// Tính năng 2 áp dụng từ trận Mỹ vs Australia (02:00 VN ngày 20/06/2026) trở đi
+const RULE2_START = {date:'2026-06-20', time:'02:00'};
 
 function isAfterRule2Start(m){
   if (m.date > RULE2_START.date) return true;
