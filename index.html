@@ -350,13 +350,22 @@ async function init(){
   state.predictionsLocked = lockedRaw || {};
   state.playerAvatars = avatarsRaw || {};
   state.currentPlayer = localStorage.getItem('currentPlayer') || null;
-  if (playersRaw){
-    state.players = playersRaw;
-  } else {
-    state.players = DEFAULT_PLAYERS.slice();
+  state.playerAuth = authRaw || {};
+
+  // Khởi tạo danh sách người chơi
+  state.players = playersRaw ? playersRaw : DEFAULT_PLAYERS.slice();
+
+  // Tự đồng bộ: ai có trong playerAuth mà chưa có trong players thì thêm vào
+  const missingPlayers = Object.keys(state.playerAuth).filter(
+    name => !state.players.includes(name)
+  );
+  if (missingPlayers.length > 0){
+    state.players = [...state.players, ...missingPlayers];
+    await fbSet('players', state.players);
+    console.log('Tự thêm người chơi bị thiếu:', missingPlayers);
+  } else if (!playersRaw){
     await fbSet('players', state.players);
   }
-  state.playerAuth = authRaw || {};
   state.loaded = true;
   const todayStr = vnToday();
   const upcomingDay = MATCHES.find(m=>m.date>=todayStr);
