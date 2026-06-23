@@ -717,8 +717,8 @@ function renderPlayerHistory(){
       if (status==='correct') correct++;
       if (status==='wrong') wrong++;
       total++;
-    } else if (actual && countable){
-      // Không dự đoán trận thuộc diện áp dụng luật -> tính sai
+    } else if (actual && countable && !CASUAL_PLAYERS.has(name)){
+      // Không dự đoán, áp dụng luật, không phải người chơi tự do -> tính sai
       status = 'nopick';
       nopick++;
       wrong++;
@@ -964,6 +964,9 @@ function pickButtons(m, current, onPick, cls){
 // Tính năng 2 áp dụng từ trận Mỹ vs Australia (02:00 VN ngày 20/06/2026) trở đi
 const RULE2_START = {date:'2026-06-20', time:'02:00'};
 
+// Người chơi tự do: không bị phạt vì không dự đoán — chỉ tính các trận họ có chọn
+const CASUAL_PLAYERS = new Set(['Dương','Hà','Hằng','Ben Bướng Bình','Hệ hệ hệ']);
+
 function isAfterRule2Start(m){
   if (m.date > RULE2_START.date) return true;
   if (m.date < RULE2_START.date) return false;
@@ -993,8 +996,8 @@ function renderDynHTML(m){
   } else if (myLocked){
     const lockLabel = myPick==='draw' ? 'Hòa' : (myPick==='team1'? m.team1 : m.team2);
     html += `<div class="placeholder-note" style="color:var(--mint);">🔒 Bạn đã chọn: <b>${lockLabel}</b></div>`;
-  } else if (started && isAfterRule2Start(m)){
-    // Tính năng 2: trận đã bắt đầu mà chưa chọn = tính như sai (chỉ từ 23/06 trở đi)
+  } else if (started && isAfterRule2Start(m) && !CASUAL_PLAYERS.has(state.currentPlayer)){
+    // Tính năng 2: trận đã bắt đầu mà chưa chọn = tính như sai (không áp dụng cho người chơi tự do)
     html += `<div class="placeholder-note" style="color:var(--coral);">⏰ Hết giờ dự đoán — tính như đoán sai</div>`;
   } else {
     const selFn = `__onsel_${m.id}`;
@@ -1016,7 +1019,7 @@ function renderDynHTML(m){
   html += `<div class="avatars">` + state.players.map(p=>{
     const isMe = p === state.currentPlayer;
     const pk = (isMe || showOthersPicks) ? picks[p] : null;
-    const noPickAndDone = !!actual && !picks[p] && isAfterRule2Start(m);
+    const noPickAndDone = !!actual && !picks[p] && isAfterRule2Start(m) && !CASUAL_PLAYERS.has(p);
     let cls = 'avt';
     if (pk){
       cls += ' picked';
@@ -1102,8 +1105,8 @@ function computeStats(){
         stats[p].total++;
         if (pick===actual) stats[p].correct++;
         else stats[p].wrong++;
-      } else if (isAfterRule2Start(m)){
-        // Tính năng 2: không dự đoán trước giờ bóng lăn = tính sai (chỉ từ Argentina vs Áo 23/06)
+      } else if (isAfterRule2Start(m) && !CASUAL_PLAYERS.has(p)){
+        // Tính năng 2: không dự đoán trước giờ bóng lăn = tính sai (không áp dụng cho người chơi tự do)
         stats[p].total++;
         stats[p].wrong++;
       }
