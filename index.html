@@ -631,7 +631,7 @@ async function adminSavePred(playerName, matchId){
   state.predictions = latestPred || {};
   state.predictionsLocked = latestLocked || {};
   if (!state.predictions[matchId]) state.predictions[matchId] = {};
-  if (val === '__delete__'){
+  if (!val || val === '__delete__'){
     delete state.predictions[matchId][playerName];
     delete state.predictionsLocked[`${matchId}_${playerName}`];
   } else {
@@ -662,7 +662,7 @@ async function saveManualScore(matchId){
   state.scores[matchId] = scoreStr;
   await Promise.all([fbSet('results', state.results), fbSet('scores', state.scores)]);
   state.adminSaved = state.adminSaved || {};
-  state.adminSaved[matchId] = true;
+  state.adminSaved[`score_${matchId}`] = true;
   render();
 }
 
@@ -776,45 +776,69 @@ function renderPlayerHistory(){
 }
 
 function renderAdminPredEditor(){
-  const matchesWithPicks = MATCHES.filter(m=>
-    !isPlaceholder(m.team1) && !isPlaceholder(m.team2) &&
-    state.players.some(p=>(state.predictions[m.id]||{})[p])
-  );
+  const allMatches = MATCHES.filter(m => !isPlaceholder(m.team1) && !isPlaceholder(m.team2));
 
-  if (matchesWithPicks.length === 0){
-    return `<div class="admin-match-list"><div style="font-size:12px;color:var(--chalk-dim);padding:10px 0;">Chưa có dự đoán nào để chỉnh sửa.</div></div>`;
-  }
+  return `<div class="admin-match-list">
+    <div style="margin-bottom:8px;">
+      <input type="text" id="admin-pred-search" class="auth-input" placeholder="🔍 Tìm trận hoặc người chơi..." oninput="filterAdminPreds()" style="margin-bottom:0;">
+    </div>
+    <div id="admin-pred-list">` +
+    allMatches.map(m=>{
+      const scoreVal = state.scores[m.id] || m.score || '';
+      const scoreParts = scoreVal.match(/(\d+)\s*-\s*(\d+)/);
+      const hVal = scoreParts ? scoreParts[1] : '';
+      const aVal = scoreParts ? scoreParts[2] : '';
+      const scoreSaved = state.adminSaved && state.adminSaved[`score_${m.id}`];
 
-  function pickLabel(pick, m){
-    if (!pick) return '—';
-    if (pick==='draw') return 'Hòa';
-    if (pick==='team1') return m.team1;
-    return m.team2;
-  }
+      const scoreRow = `<div class="admin-pred-match-row" style="background:rgba(217,164,65,.06);border-radius:7px;padding:6px 8px;margin-bottom:4px;">
+        <div class="admin-pred-teams" style="color:var(--gold);font-weight:700;">📊 Tỷ số</div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <input class="ami-score-input" id="ami-h-${m.id}" type="number" min="0" max="99" value="${hVal}" placeholder="0" style="width:36px;">
+          <span style="color:var(--chalk-dim);">–</span>
+          <input class="ami-score-input" id="ami-a-${m.id}" type="number" min="0" max="99" value="${aVal}" placeholder="0" style="width:36px;">
+        </div>
+        <button class="admin-pred-save" style="background:var(--coral);" onclick="saveManualScore(${m.id})">Lưu</button>
+        ${scoreSaved?`<span class="ami-saved">✓</span>`:''}
+      </div>`;
 
-  return `<div class="admin-match-list">` +
-    matchesWithPicks.map(m=>{
-      const playerRows = state.players.filter(p=>(state.predictions[m.id]||{})[p]).map(p=>{
-        const cur = state.predictions[m.id][p];
+      const playerRows = state.players.map(p=>{
+        const cur = (state.predictions[m.id]||{})[p];
         const saved = state.adminSaved && state.adminSaved[`pred_${p}_${m.id}`];
-        return `<div class="admin-pred-match-row">
+        return `<div class="admin-pred-match-row" data-search="${p.toLowerCase()} ${m.team1.toLowerCase()} ${m.team2.toLowerCase()}">
           <div class="admin-pred-teams">${getAvatar(p)} ${p}</div>
-          <select class="admin-pred-select" id="apred-${p}-${m.id}">
+          <select class="admin-pred-select" id="apred-${p.replace(/'/g,"\\'")}-${m.id}">
+            <option value="" ${!cur?'selected':''}>— Chưa chọn —</option>
             <option value="team1" ${cur==='team1'?'selected':''}>${m.team1}</option>
             <option value="draw" ${cur==='draw'?'selected':''}>Hòa</option>
             <option value="team2" ${cur==='team2'?'selected':''}>${m.team2}</option>
-            <option value="__delete__">🗑️ Xoá dự đoán</option>
+            ${cur?`<option value="__delete__">🗑️ Xoá</option>`:''}
           </select>
-          <button class="admin-pred-save" onclick="adminSavePred('${p}',${m.id})">Lưu</button>
+          <button class="admin-pred-save" onclick="adminSavePred('${p.replace(/'/g,"\\'")}',${m.id})">Lưu</button>
           ${saved?`<span class="ami-saved">✓</span>`:''}
         </div>`;
       }).join('');
-      return `<div class="admin-match-item">
-        <div class="ami-teams">${m.team1} vs ${m.team2}</div>
+
+      return `<div class="admin-match-item" data-date="${m.date}" data-teams="${m.team1.toLowerCase()} ${m.team2.toLowerCase()}">
+        <div class="ami-teams">${m.team1} vs ${m.team2} ${scoreVal?`(${scoreVal})`:''}</div>
         <div class="ami-meta">${m.date.slice(8,10)}/${m.date.slice(5,7)} ${m.time} · ${m.stage}${m.group?' Bảng '+m.group:''}</div>
+        ${scoreRow}
         ${playerRows}
       </div>`;
-    }).join('') + `</div>`;
+    }).join('') + `</div></div>`;
+}
+
+function filterAdminPreds(){
+  const q = (document.getElementById('admin-pred-search').value||'').toLowerCase();
+  document.querySelectorAll('#admin-pred-list .admin-match-item').forEach(item=>{
+    const teams = item.dataset.teams || '';
+    const rows = item.querySelectorAll('.admin-pred-match-row');
+    if (!q){ item.style.display=''; rows.forEach(r=>r.style.display=''); return; }
+    // match by team name or player name
+    const teamMatch = teams.includes(q);
+    rows.forEach(r=>{ r.style.display = (teamMatch || (r.dataset.search||'').includes(q)) ? '' : 'none'; });
+    const anyVisible = Array.from(rows).some(r=>r.style.display!=='none');
+    item.style.display = (teamMatch || anyVisible) ? '' : 'none';
+  });
 }
 
 function renderAdminPanel(){
@@ -884,13 +908,9 @@ function renderAdminPanel(){
 
   return `<div class="admin-panel">
     <div class="admin-title">🔧 Bảng điều khiển Admin</div>
-    <div class="admin-desc">Nhập tỷ số thủ công hoặc chỉnh sửa dự đoán của người chơi.</div>
-    <button class="admin-entry-btn" onclick="toggleManualEntry()">
-      ✏️ ${state.adminManualEntry ? 'Đóng nhập tỷ số thủ công' : 'Nhập tỷ số thủ công'}
-    </button>
-    ${manualEntryHTML}
+    <div class="admin-desc">Thêm/sửa dự đoán và tỷ số trận đấu cho từng người chơi.</div>
     <button class="admin-entry-btn" style="border-color:rgba(111,207,151,.5);color:var(--mint);margin-top:0;" onclick="toggleEditPreds()">
-      🎯 ${state.adminEditPreds ? 'Đóng chỉnh sửa dự đoán' : 'Chỉnh sửa / xoá dự đoán người chơi'}
+      🎯 ${state.adminEditPreds ? 'Đóng bảng chỉnh sửa' : 'Thêm / sửa dự đoán & tỷ số'}
     </button>
     ${state.adminEditPreds ? renderAdminPredEditor() : ''}
     <button class="admin-entry-btn" style="border-color:rgba(226,114,91,.5);color:var(--coral);margin-top:0;" onclick="toggleManagePlayers()">
