@@ -299,7 +299,7 @@ function getAvatar(name){
 let state = {
   loaded:false, currentPlayer:null, predictions:{}, results:{}, scores:{},
   players:[], playerAuth:{}, playerAvatars:{}, predictionsLocked:{}, pendingPrediction:{},
-  playerJoinDate:{},
+  playerJoinDate:{}, scorePredictions:{}, scorePredLocked:{}, pendingScorePred:{},
   tab:'matches', filter:'upcoming',
   openDays:new Set(),
   authModal:null, authError:'', configError:false,
@@ -342,8 +342,10 @@ async function init(){
     render();
     return;
   }
-  const [pred, res, scoresRaw, playersRaw, authRaw, lockedRaw, avatarsRaw, joinDatesRaw] = await Promise.all([
-    fbGet('predictions'), fbGet('results'), fbGet('scores'), fbGet('players'), fbGet('playerAuth'), fbGet('predictionsLocked'), fbGet('playerAvatars'), fbGet('playerJoinDate')
+  const [pred, res, scoresRaw, playersRaw, authRaw, lockedRaw, avatarsRaw, joinDatesRaw, scorePredRaw, scorePredLockedRaw] = await Promise.all([
+    fbGet('predictions'), fbGet('results'), fbGet('scores'), fbGet('players'), fbGet('playerAuth'),
+    fbGet('predictionsLocked'), fbGet('playerAvatars'), fbGet('playerJoinDate'),
+    fbGet('scorePredictions'), fbGet('scorePredLocked')
   ]);
   state.predictions = pred || {};
   state.results = res || {};
@@ -351,6 +353,8 @@ async function init(){
   state.predictionsLocked = lockedRaw || {};
   state.playerAvatars = avatarsRaw || {};
   state.playerJoinDate = joinDatesRaw || {};
+  state.scorePredictions = scorePredRaw || {};
+  state.scorePredLocked = scorePredLockedRaw || {};
   state.currentPlayer = localStorage.getItem('currentPlayer') || null;
   state.playerAuth = authRaw || {};
 
@@ -703,7 +707,7 @@ function renderPlayerHistory(){
   const name = state.viewingPlayer;
   const isOwnHistory = name === state.currentPlayer;
   const CHUOI_PER_LOSS = 20;
-  let correct=0, wrong=0, nopick=0, total=0;
+  let correct=0, wrong=0, nopick=0, total=0, scorePredBonus=0;
   const items = MATCHES.map(m=>{
     const pick = (state.predictions[m.id]||{})[name];
     const actual = getActualResult(m);
@@ -728,13 +732,24 @@ function renderPlayerHistory(){
       if (status==='wrong') wrong++;
       total++;
     } else if (actual && countable && !CASUAL_PLAYERS.has(name)){
-      // Không dự đoán, áp dụng luật, không phải người chơi tự do -> tính sai
       status = 'nopick';
       nopick++;
       wrong++;
       total++;
     } else {
-      return null; // không dự đoán, không tính
+      return null;
+    }
+
+    // score pred bonus
+    if (isScorePredEnabled(m)){
+      const sp = (state.scorePredictions[m.id]||{})[name];
+      const as2 = state.scores[m.id]||m.score;
+      if (sp && as2){
+        const [ph,pa] = sp.split('-').map(Number);
+        const [ah,aa] = as2.split(' - ').map(Number);
+        if (!isNaN(ph)&&!isNaN(pa)&&!isNaN(ah)&&!isNaN(aa))
+          scorePredBonus += (ph===ah&&pa===aa) ? CHUOI_SCORE_CORRECT : CHUOI_SCORE_WRONG;
+      }
     }
 
     const pickLabel = !pick ? null : (pick==='draw' ? 'Hòa' : (pick==='team1'? m.team1 : m.team2));
@@ -749,7 +764,7 @@ function renderPlayerHistory(){
     <div class="hist-summary">
       <div class="hist-stat"><div class="hs-num" style="color:var(--mint)">${correct}</div><div class="hs-lbl">Đúng</div></div>
       <div class="hist-stat"><div class="hs-num" style="color:var(--coral)">${wrong}</div><div class="hs-lbl">Sai</div></div>
-      <div class="hist-stat"><div class="hs-num" style="color:var(--gold)">${wrong*CHUOI_PER_LOSS} 🍌</div><div class="hs-lbl">Chuối nợ</div></div>
+      <div class="hist-stat"><div class="hs-num" style="color:var(--gold)">${Math.max(0,wrong*20+scorePredBonus)} 🍌</div><div class="hs-lbl">Chuối nợ</div></div>
       <div class="hist-stat"><div class="hs-num">${total}</div><div class="hs-lbl">Đã tính</div></div>
     </div>
     <div class="hist-body">
@@ -767,6 +782,16 @@ function renderPlayerHistory(){
             <div class="hist-match">
               <div class="hm-teams">${m.team1} vs ${m.team2}${scoreStr}</div>
               <div class="hm-meta">${m.date.slice(8,10)}/${m.date.slice(5,7)} · ${m.stage}${m.group?' · Bảng '+m.group:''}</div>
+              ${(()=>{
+                const sp = (state.scorePredictions[m.id]||{})[name];
+                if (!sp || !isScorePredEnabled(m)) return '';
+                const [ph,pa] = sp.split('-').map(Number);
+                const as2 = state.scores[m.id]||m.score;
+                if (!as2) return `<div style="font-size:10px;color:var(--gold);">🎯 Đặt tỷ số: ${sp}</div>`;
+                const [ah,aa] = as2.split(' - ').map(Number);
+                const exact = ph===ah && pa===aa;
+                return `<div style="font-size:10px;color:${exact?'var(--mint)':'var(--coral)'};">🎯 ${sp} — ${exact?'Đúng chính xác! -40 🍌':'+20 🍌'}</div>`;
+              })()}
             </div>
             <div class="hist-pick ${isNoPick?'wrong':status}">${pickDisplay}</div>
           </div>`;
@@ -923,6 +948,38 @@ function renderAdminPanel(){
   </div>`;
 }
 
+function isScorePredEnabled(m){
+  return m.date >= SCORE_PRED_START;
+}
+function getMyScorePred(matchId){
+  if (!state.currentPlayer) return null;
+  return (state.scorePredictions[matchId]||{})[state.currentPlayer] || null;
+}
+function isMyScorePredLocked(matchId){
+  if (!state.currentPlayer) return false;
+  return !!(state.scorePredLocked[`${matchId}_${state.currentPlayer}`]);
+}
+function setPendingScorePred(matchId, field, val){
+  state.pendingScorePred[matchId] = state.pendingScorePred[matchId] || {};
+  state.pendingScorePred[matchId][field] = val;
+  renderDyn(matchId);
+}
+async function confirmScorePred(matchId){
+  const p = state.pendingScorePred[matchId] || {};
+  const h = parseInt(p.home ?? '');
+  const a = parseInt(p.away ?? '');
+  if (isNaN(h) || isNaN(a) || h < 0 || a < 0){ alert('Nhập tỷ số hợp lệ (2 số nguyên ≥ 0)'); return; }
+  const [latestSP, latestSPL] = await Promise.all([fbGet('scorePredictions'), fbGet('scorePredLocked')]);
+  state.scorePredictions = latestSP || {};
+  state.scorePredLocked = latestSPL || {};
+  state.scorePredictions[matchId] = state.scorePredictions[matchId] || {};
+  state.scorePredictions[matchId][state.currentPlayer] = `${h}-${a}`;
+  state.scorePredLocked[`${matchId}_${state.currentPlayer}`] = true;
+  delete state.pendingScorePred[matchId];
+  await Promise.all([fbSet('scorePredictions', state.scorePredictions), fbSet('scorePredLocked', state.scorePredLocked)]);
+  renderDyn(matchId);
+}
+
 function selectPendingPrediction(matchId, pick){
   state.pendingPrediction[matchId] = pick;
   renderDyn(matchId);
@@ -993,6 +1050,10 @@ function pickButtons(m, current, onPick, cls){
 
 // Tính năng 2 áp dụng từ trận Mỹ vs Australia (02:00 VN ngày 20/06/2026) trở đi
 const RULE2_START = {date:'2026-06-20', time:'02:00'};
+// Tính năng dự đoán tỷ số: chỉ từ ngày 26/06/2026
+const SCORE_PRED_START = '2026-06-26';
+const CHUOI_SCORE_CORRECT = -40; // đoán đúng: trừ 40 chuối
+const CHUOI_SCORE_WRONG   =  20; // đoán sai:  cộng 20 chuối
 
 // Người chơi tự do: không bị phạt vì không dự đoán — chỉ tính các trận họ có chọn
 const CASUAL_PLAYERS = new Set(['Dương','Ha','Hang','Ben Bướng Bình','Hệ hệ hệ','Thông']);
@@ -1111,6 +1172,56 @@ function renderDynHTML(m){
     html += `<div class="result-row"><div class="result-banner" style="color:var(--chalk-dim);font-weight:500;">Chưa có kết quả</div></div>`;
   }
 
+  // --- score prediction section ---
+  if (isScorePredEnabled(m) && state.currentPlayer && !isPlaceholder(m.team1)){
+    const myScorePred = getMyScorePred(m.id);
+    const scoreLocked = isMyScorePredLocked(m.id);
+    const actualScore = state.scores[m.id] || m.score;
+    const pend = state.pendingScorePred[m.id] || {};
+    const predSetFn = `__onspred_${m.id}`;
+    window[`${predSetFn}_h`] = (v)=>setPendingScorePred(m.id,'home',v);
+    window[`${predSetFn}_a`] = (v)=>setPendingScorePred(m.id,'away',v);
+    const confirmSpFn = `__onspredconfirm_${m.id}`;
+    window[confirmSpFn] = ()=>confirmScorePred(m.id);
+
+    let scoreLabel = '';
+    if (myScorePred && actualScore){
+      const [ph,pa] = myScorePred.split('-').map(Number);
+      const [ah,aa] = actualScore.split(' - ').map(Number);
+      const exact = ph===ah && pa===aa;
+      scoreLabel = exact
+        ? `<span style="color:var(--mint);font-size:11px;">🎯 ${myScorePred} — Đúng chính xác! -40 chuối</span>`
+        : `<span style="color:var(--coral);font-size:11px;">🎯 ${myScorePred} — Sai +20 chuối</span>`;
+    } else if (myScorePred){
+      scoreLabel = `<span style="color:var(--gold);font-size:11px;">🎯 Đã đặt: ${myScorePred}</span>`;
+    }
+
+    html += `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);">`;
+    if (scoreLocked){
+      html += `<div style="font-size:12px;">${scoreLabel || `<span style="color:var(--gold);">🎯 ${myScorePred}</span>`}</div>`;
+    } else if (!started){
+      const hVal = pend.home ?? (myScorePred ? myScorePred.split('-')[0] : '');
+      const aVal = pend.away ?? (myScorePred ? myScorePred.split('-')[1] : '');
+      const hasPend = pend.home!==undefined || pend.away!==undefined || myScorePred;
+      html += `<div style="font-size:11px;color:var(--chalk-dim);margin-bottom:5px;">🎯 Dự đoán tỷ số chính xác (tùy chọn)</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <input type="number" min="0" max="99" value="${hVal}" placeholder="0"
+            class="ami-score-input" style="width:40px;"
+            oninput="${predSetFn}_h(this.value)">
+          <span style="color:var(--chalk-dim);">–</span>
+          <input type="number" min="0" max="99" value="${aVal}" placeholder="0"
+            class="ami-score-input" style="width:40px;"
+            oninput="${predSetFn}_a(this.value)">
+          <button class="confirm-btn" style="flex:1;margin:0;padding:7px;font-size:11px;${hasPend?'background:var(--pitch-light);color:var(--gold);border:1.5px solid var(--gold);':'background:rgba(244,241,234,.06);color:var(--chalk-dim);'}"
+            onclick="${confirmSpFn}()">🔒 Xác nhận tỷ số</button>
+        </div>
+        <div style="font-size:10.5px;color:var(--chalk-dim);margin-top:4px;">Đúng -40 🍌 · Sai +20 🍌 · Không chọn thì không tính</div>`;
+    } else if (myScorePred){
+      html += `<div>${scoreLabel}</div>`;
+    }
+    html += `</div>`;
+  }
+
   if (m.note) html += `<div class="note">★ ${m.note}</div>`;
   return html;
 }
@@ -1163,29 +1274,43 @@ function renderMatchesTab(){
 
 function computeStats(){
   const CHUOI_PER_LOSS = 20;
-  const stats = {}; state.players.forEach(p=>stats[p]={wrong:0,correct:0,total:0});
+  const stats = {}; state.players.forEach(p=>stats[p]={wrong:0,correct:0,total:0,scorePredBonus:0});
   MATCHES.forEach(m=>{
     const actual = getActualResult(m);
     if (!actual) return;
     const picks = state.predictions[m.id] || {};
     state.players.forEach(p=>{
       const pick = picks[p];
-      if (!isMatchCountableForPlayer(m, p)) return; // trước ngày bắt đầu của người này
+      if (!isMatchCountableForPlayer(m, p)) return;
       if (pick){
         stats[p].total++;
         if (pick===actual) stats[p].correct++;
         else stats[p].wrong++;
       } else if (isAfterRule2Start(m) && !CASUAL_PLAYERS.has(p)){
-        // Tính năng 2: không dự đoán trước giờ bóng lăn = tính sai (không áp dụng cho người chơi tự do)
         stats[p].total++;
         stats[p].wrong++;
+      }
+      // Score prediction bonus/penalty
+      if (isScorePredEnabled(m)){
+        const sp = (state.scorePredictions[m.id]||{})[p];
+        const actualScore = state.scores[m.id] || m.score;
+        if (sp && actualScore){
+          const [ph,pa] = sp.split('-').map(Number);
+          const [ah,aa] = actualScore.split(' - ').map(Number);
+          if (!isNaN(ph) && !isNaN(pa) && !isNaN(ah) && !isNaN(aa)){
+            if (ph===ah && pa===aa) stats[p].scorePredBonus += CHUOI_SCORE_CORRECT; // -40
+            else stats[p].scorePredBonus += CHUOI_SCORE_WRONG; // +20
+          }
+        }
       }
     });
   });
   const maxWrong = Math.max(1, ...state.players.map(p=>stats[p].wrong));
   return state.players.map(p=>{
     const s = stats[p];
-    return {name:p, ...s, chuoi: s.wrong * CHUOI_PER_LOSS, bar: Math.round(s.wrong/maxWrong*100)};
+    const baseChuoi = s.wrong * CHUOI_PER_LOSS;
+    const chuoi = Math.max(0, baseChuoi + s.scorePredBonus); // không âm
+    return {name:p, ...s, chuoi, baseChuoi, bar: Math.round(s.wrong/maxWrong*100)};
   }).sort((a,b)=> b.chuoi-a.chuoi || a.correct-b.correct);
 }
 
