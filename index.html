@@ -1061,8 +1061,8 @@ function pickButtons(m, current, onPick, cls){
 const RULE2_START = {date:'2026-06-20', time:'02:00'};
 // Tính năng dự đoán tỷ số: chỉ từ ngày 26/06/2026
 const SCORE_PRED_START = '2026-06-26';
-const CHUOI_SCORE_CORRECT = -40; // đoán đúng: trừ 40 chuối
-const CHUOI_SCORE_WRONG   =  20; // đoán sai:  cộng 20 chuối
+const CHUOI_SCORE_CORRECT = -100; // đoán đúng: trừ 100 chuối
+const CHUOI_SCORE_WRONG   =   10; // đoán sai:  cộng 10 chuối
 
 // Người chơi tự do: không bị phạt vì không dự đoán — chỉ tính các trận họ có chọn
 const CASUAL_PLAYERS = new Set(['Dương','Ha','Hang','Ben Bướng Bình','Hệ hệ hệ','Thông']);
@@ -1227,7 +1227,7 @@ function renderDynHTML(m){
           <button class="confirm-btn" style="flex:1;margin:0;padding:7px;font-size:11px;${hasPend?'background:var(--pitch-light);color:var(--gold);border:1.5px solid var(--gold);':'background:rgba(244,241,234,.06);color:var(--chalk-dim);'}"
             onclick="${confirmSpFn}()">🔒 Xác nhận tỷ số</button>
         </div>
-        <div style="font-size:10.5px;color:var(--chalk-dim);margin-top:4px;">Đúng -40 🍌 · Sai +20 🍌 · Không chọn thì không tính</div>`;
+        <div style="font-size:10.5px;color:var(--chalk-dim);margin-top:4px;">Đúng -100 🍌 · Sai +10 🍌 · Không chọn thì không tính</div>`;
     } else if (myScorePred){
       html += `<div>${scoreLabel}</div>`;
     }
