@@ -740,7 +740,7 @@ function renderPlayerHistory(){
       if (status==='correct') correct++;
       if (status==='wrong') wrong++;
       total++;
-    } else if (actual && countable && !CASUAL_PLAYERS.has(name)){
+    } else if (actual && countable && isPenaltyApplied(m, name)){
       status = 'nopick';
       nopick++;
       wrong++;
@@ -799,7 +799,7 @@ function renderPlayerHistory(){
                 if (!as2) return `<div style="font-size:10px;color:var(--gold);">🎯 Đặt tỷ số: ${sp}</div>`;
                 const [ah,aa] = as2.split(' - ').map(Number);
                 const exact = ph===ah && pa===aa;
-                return `<div style="font-size:10px;color:${exact?'var(--mint)':'var(--coral)'};">🎯 ${sp} — ${exact?'Đúng chính xác! -40 🍌':'+20 🍌'}</div>`;
+                return `<div style="font-size:10px;color:${exact?'var(--mint)':'var(--coral)'};">🎯 ${sp} — ${exact?`Đúng chính xác! -${Math.abs(CHUOI_SCORE_CORRECT)} 🍌`:`Sai +${CHUOI_SCORE_WRONG} 🍌`}</div>`;
               })()}
             </div>
             <div class="hist-pick ${isNoPick?'wrong':status}">${pickDisplay}</div>
@@ -957,6 +957,18 @@ function renderAdminPanel(){
   </div>`;
 }
 
+function isKnockoutMatch(m){
+  return m.stage !== 'Vòng bảng';
+}
+
+// Kiểm tra người chơi có bị phạt nếu không dự đoán trận này không
+function isPenaltyApplied(m, playerName){
+  // Vòng loại trực tiếp: tất cả mọi người đều bị phạt
+  if (isKnockoutMatch(m)) return true;
+  // Vòng bảng: chỉ nhóm chính thức bị phạt (không áp dụng cho nhóm tự do)
+  return !CASUAL_PLAYERS.has(playerName);
+}
+
 function isScorePredEnabled(m){
   return m.date >= SCORE_PRED_START;
 }
@@ -1065,7 +1077,7 @@ const CHUOI_SCORE_CORRECT = -100; // đoán đúng: trừ 100 chuối
 const CHUOI_SCORE_WRONG   =   10; // đoán sai:  cộng 10 chuối
 
 // Người chơi tự do: không bị phạt vì không dự đoán — chỉ tính các trận họ có chọn
-const CASUAL_PLAYERS = new Set(['Dương','Ha','Hang','Ben Bướng Bình','Hệ hệ hệ','Thông']);
+const CASUAL_PLAYERS = new Set(['Ha','Hang','Ben Bướng Bình','Hệ hệ hệ','Thông']);
 
 function isAfterRule2Start(m){
   if (m.date > RULE2_START.date) return true;
@@ -1138,7 +1150,7 @@ function renderDynHTML(m){
   } else if (myLocked){
     const lockLabel = myPick==='draw' ? 'Hòa' : (myPick==='team1'? m.team1 : m.team2);
     html += `<div class="placeholder-note" style="color:var(--mint);">🔒 Bạn đã chọn: <b>${lockLabel}</b></div>`;
-  } else if (started && isAfterRule2Start(m) && !CASUAL_PLAYERS.has(state.currentPlayer)){
+  } else if (started && isAfterRule2Start(m) && isPenaltyApplied(m, state.currentPlayer)){
     // Tính năng 2: trận đã bắt đầu mà chưa chọn = tính như sai (không áp dụng cho người chơi tự do)
     html += `<div class="placeholder-note" style="color:var(--coral);">⏰ Hết giờ dự đoán — tính như đoán sai</div>`;
   } else {
@@ -1161,7 +1173,7 @@ function renderDynHTML(m){
   html += `<div class="avatars">` + state.players.map(p=>{
     const isMe = p === state.currentPlayer;
     const pk = (isMe || showOthersPicks) ? picks[p] : null;
-    const noPickAndDone = !!actual && !picks[p] && isAfterRule2Start(m) && !CASUAL_PLAYERS.has(p) && isMatchCountableForPlayer(m, p);
+    const noPickAndDone = !!actual && !picks[p] && isAfterRule2Start(m) && isPenaltyApplied(m, p) && isMatchCountableForPlayer(m, p);
     let cls = 'avt';
     if (pk){
       cls += ' picked';
@@ -1202,8 +1214,8 @@ function renderDynHTML(m){
       const [ah,aa] = actualScore.split(' - ').map(Number);
       const exact = ph===ah && pa===aa;
       scoreLabel = exact
-        ? `<span style="color:var(--mint);font-size:11px;">🎯 ${myScorePred} — Đúng chính xác! -40 chuối</span>`
-        : `<span style="color:var(--coral);font-size:11px;">🎯 ${myScorePred} — Sai +20 chuối</span>`;
+        ? `<span style="color:var(--mint);font-size:11px;">🎯 ${myScorePred} — Đúng chính xác! ${Math.abs(CHUOI_SCORE_CORRECT)} chuối</span>`
+        : `<span style="color:var(--coral);font-size:11px;">🎯 ${myScorePred} — Sai +${CHUOI_SCORE_WRONG} chuối</span>`;
     } else if (myScorePred){
       scoreLabel = `<span style="color:var(--gold);font-size:11px;">🎯 Đã đặt: ${myScorePred}</span>`;
     }
@@ -1300,7 +1312,7 @@ function computeStats(){
         stats[p].total++;
         if (pick===actual) stats[p].correct++;
         else stats[p].wrong++;
-      } else if (isAfterRule2Start(m) && !CASUAL_PLAYERS.has(p)){
+      } else if (isAfterRule2Start(m) && isPenaltyApplied(m, p)){
         stats[p].total++;
         stats[p].wrong++;
       }
