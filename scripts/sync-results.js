@@ -101,9 +101,17 @@ function findKnockoutByTime(apiDateStr){
 
 function dbUrl(key){ return `${FIREBASE_DB_URL.replace(/\/$/,"")}/${DB_PATH}/${key}.json`; }
 async function fbGet(key){
-  const res = await fetch(dbUrl(key));
+  // Dùng orderBy để ngăn Firebase tự convert object có key số thành array
+  const res = await fetch(dbUrl(key)+"?print=pretty");
   if(!res.ok) throw new Error(`Firebase GET ${key}: HTTP ${res.status}`);
-  return await res.json();
+  const data = await res.json();
+  // Nếu Firebase trả về array (do key là số liên tục), convert lại thành object
+  if(Array.isArray(data)){
+    const obj={};
+    data.forEach((v,i)=>{ if(v!=null) obj[i]=v; });
+    return obj;
+  }
+  return data;
 }
 async function fbSet(key,value){
   const res = await fetch(dbUrl(key),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(value)});
@@ -163,10 +171,11 @@ async function main(){
     if(!ours){ console.log(`Không match: ${apiHome} vs ${apiAway}`); continue; }
 
     let upd=false;
-    if(!res2[ours.id]){ res2[ours.id]=winner==="HOME_TEAM"?"team1":winner==="AWAY_TEAM"?"team2":"draw"; upd=true; }
-    if(hasScore&&!sc2[ours.id]){ sc2[ours.id]=`${ft.home} - ${ft.away}`; upd=true; }
+    const matchKey=String(ours.id);
+    if(!res2[matchKey]){ res2[matchKey]=winner==="HOME_TEAM"?"team1":winner==="AWAY_TEAM"?"team2":"draw"; upd=true; }
+    if(hasScore&&!sc2[matchKey]){ sc2[matchKey]=`${ft.home} - ${ft.away}`; upd=true; }
     if(upd) rUpd++;
-    console.log(`✓ #${ours.id} ${ours.team1} vs ${ours.team2}: ${sc2[ours.id]||"?"} (${res2[ours.id]||"?"})`);
+    console.log(`✓ #${ours.id} ${ours.team1} vs ${ours.team2}: ${sc2[matchKey]||"?"} (${res2[matchKey]||"?"})`);
   }
 
   const w=[];
