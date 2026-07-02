@@ -94,9 +94,10 @@ function findKnockoutByTime(apiDateStr){
   const vnDate = new Date(new Date(apiDateStr).getTime() + 7*60*60*1000);
   const dateStr = vnDate.toISOString().slice(0,10);
   const timeStr = vnDate.toISOString().slice(11,16);
+  // Tìm theo ngày+giờ trong các trận knockout (cả trận có tên thật hoặc còn placeholder)
   return MATCHES.find(m =>
-    m.date===dateStr && m.time===timeStr &&
-    m.stage!=="Vòng bảng" && isPlaceholder(m.team1));
+    m.date===dateStr && m.time===timeStr && m.stage!=="Vòng bảng"
+  );
 }
 
 function dbUrl(key){ return `${FIREBASE_DB_URL.replace(/\/$/,"")}/${DB_PATH}/${key}.json`; }
@@ -167,7 +168,12 @@ async function main(){
     const hasScore=ft.home!=null&&ft.away!=null;
 
     let ours=findOurMatch(apiHome,apiAway);
-    if(!ours&&isKnockout) ours=findKnockoutByTime(fx.utcDate);
+    // Với vòng knockout: ưu tiên tìm theo thời gian để tránh nhầm với trận vòng bảng cùng đội
+    if(isKnockout){
+      const byTime=findKnockoutByTime(fx.utcDate);
+      if(byTime) ours=byTime;
+      else if(!ours) ours=null;
+    }
     if(!ours){ console.log(`Không match: ${apiHome} vs ${apiAway}`); continue; }
 
     let upd=false;
