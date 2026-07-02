@@ -336,6 +336,34 @@ async function fbSet(key, value){
   }catch(e){ console.error("fbSet failed:", key, e); return false; }
 }
 
+// Ghi/xoá MỘT người chơi mà không cần đọc-rồi-ghi cả danh sách —
+// tránh mất dữ liệu khi nhiều người cùng thêm/sửa lúc gần nhau (race condition).
+function playerKeyPath(name){
+  return encodeURIComponent(name).replace(/\./g,'%2E');
+}
+async function fbAddPlayer(name){
+  try{
+    const url = `${FIREBASE_DB_URL.replace(/\/$/,'')}/${DB_PATH}/players/${playerKeyPath(name)}.json`;
+    const res = await fetch(url, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(true) });
+    if (!res.ok) throw new Error("HTTP "+res.status);
+    return true;
+  }catch(e){ console.error("fbAddPlayer failed:", name, e); return false; }
+}
+async function fbRemovePlayer(name){
+  try{
+    const url = `${FIREBASE_DB_URL.replace(/\/$/,'')}/${DB_PATH}/players/${playerKeyPath(name)}.json`;
+    const res = await fetch(url, { method:"DELETE" });
+    if (!res.ok) throw new Error("HTTP "+res.status);
+    return true;
+  }catch(e){ console.error("fbRemovePlayer failed:", name, e); return false; }
+}
+// Chuyển dữ liệu players từ Firebase (object {tên:true} hoặc mảng cũ) thành mảng tên dùng trong app
+function playersToArray(raw){
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.filter(Boolean);
+  return Object.keys(raw).map(k => decodeURIComponent(k.replace(/%2E/g,'.')));
+}
+
 async function init(){
   if (!firebaseConfigured()){
     state.loaded = true;
@@ -360,20 +388,22 @@ async function init(){
   state.currentPlayer = localStorage.getItem('currentPlayer') || null;
   state.playerAuth = authRaw || {};
 
-  // Khởi tạo danh sách người chơi
-  state.players = playersRaw ? playersRaw : DEFAULT_PLAYERS.slice();
+  // Khởi tạo danh sách người chơi (hỗ trợ cả dạng mảng cũ và object mới)
+  state.players = playersRaw ? playersToArray(playersRaw) : DEFAULT_PLAYERS.slice();
 
-  // Tự đồng bộ: ai có trong playerAuth mà chưa có trong players thì thêm vào
+  // Tự đồng bộ: ai có trong playerAuth mà chưa có trong players thì thêm vào (ghi an toàn từng người)
   const missingPlayers = Object.keys(state.playerAuth).filter(
     name => !state.players.includes(name)
   );
   if (missingPlayers.length > 0){
     state.players = [...state.players, ...missingPlayers];
-    await fbSet('players', state.players);
+    await Promise.all(missingPlayers.map(n => fbAddPlayer(n)));
     console.log('Tự thêm người chơi bị thiếu:', missingPlayers);
   } else if (!playersRaw){
-    await fbSet('players', state.players);
+    // Chỉ ghi khi chưa có gì trên Firebase (lần đầu)
+    await Promise.all(DEFAULT_PLAYERS.map(n => fbAddPlayer(n)));
   }
+  // Không tự migrate dạng cũ sang mới - tránh ghi đè mất dữ liệu
   state.loaded = true;
   const todayStr = vnToday();
   const upcomingDay = MATCHES.find(m=>m.date>=todayStr);
@@ -472,13 +502,13 @@ async function doCreate(name, pw, pw2){
   if (pw.length < 4){ state.authError = 'Mật khẩu cần ít nhất 4 ký tự.'; render(); return; }
   if (pw !== pw2){ state.authError = 'Hai mật khẩu không khớp.'; render(); return; }
   const latestPlayers = await fbGet('players');
-  state.players = latestPlayers || state.players;
+  state.players = latestPlayers ? playersToArray(latestPlayers) : state.players;
   if (state.players.some(p=>p.toLowerCase()===name.toLowerCase())){
     state.authError = 'Tên này đã có trong danh sách — hãy đăng nhập vào tên đó thay vì tạo mới.';
     render(); return;
   }
   state.players.push(name);
-  await fbSet('players', state.players);
+  await fbAddPlayer(name); // ghi an toàn, không đè cả danh sách
   const latestAuth = await fbGet('playerAuth');
   state.playerAuth = latestAuth || {};
   state.playerAuth[name] = await hashPassword(pw);
@@ -591,10 +621,9 @@ function cancelDeletePlayer(){
   render();
 }
 async function doDeletePlayer(name){
-  // Remove from player list
-  const latestPlayers = await fbGet('players');
-  state.players = (latestPlayers || state.players).filter(p => p !== name);
-  await fbSet('players', state.players);
+  // Remove from player list (ghi an toàn, không đè cả danh sách)
+  state.players = state.players.filter(p => p !== name);
+  await fbRemovePlayer(name);
 
   // Remove auth hash
   const latestAuth = await fbGet('playerAuth');
