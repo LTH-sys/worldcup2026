@@ -91,13 +91,15 @@ function findOurMatch(apiHome, apiAway){
 }
 
 function findKnockoutByTime(apiDateStr){
-  const vnDate = new Date(new Date(apiDateStr).getTime() + 7*60*60*1000);
-  const dateStr = vnDate.toISOString().slice(0,10);
-  const timeStr = vnDate.toISOString().slice(11,16);
-  // Tìm theo ngày+giờ trong các trận knockout (cả trận có tên thật hoặc còn placeholder)
-  return MATCHES.find(m =>
-    m.date===dateStr && m.time===timeStr && m.stage!=="Vòng bảng"
-  );
+  // API có thể gửi UTC hoặc giờ địa phương Mỹ (ET = UTC-4)
+  // Thử cả UTC+7 (VN) và UTC+11 (bù cho ET-4 + VN+7)
+  function tryOffset(hours){
+    const vnDate = new Date(new Date(apiDateStr).getTime() + hours*60*60*1000);
+    const dateStr = vnDate.toISOString().slice(0,10);
+    const timeStr = vnDate.toISOString().slice(11,16);
+    return MATCHES.find(m => m.date===dateStr && m.time===timeStr && m.stage!=="Vòng bảng");
+  }
+  return tryOffset(7) || tryOffset(11); // UTC+7 (VN from UTC) hoặc UTC+11 (VN from ET/EDT)
 }
 
 function dbUrl(key){ return `${FIREBASE_DB_URL.replace(/\/$/,"")}/${DB_PATH}/${key}.json`; }
@@ -132,11 +134,17 @@ async function main(){
   const fixtures=await fetchFixtures();
   console.log(`${fixtures.length} trận.`);
 
-  const [res2,sc2,kt2]=await Promise.all([
+  const [res2raw,sc2raw,kt2raw]=await Promise.all([
     fbGet("results").catch(()=>({})),
     fbGet("scores").catch(()=>({})),
     fbGet("knockoutTeams").catch(()=>({})),
   ]);
+  // Firebase trả null nếu node chưa tồn tại — đảm bảo luôn là object
+  const res2 = (res2raw && typeof res2raw==='object' && !Array.isArray(res2raw)) ? res2raw :
+               Array.isArray(res2raw) ? (()=>{const o={};res2raw.forEach((v,i)=>{if(v!=null)o[String(i)]=v;});return o;})() : {};
+  const sc2  = (sc2raw  && typeof sc2raw ==='object' && !Array.isArray(sc2raw))  ? sc2raw  :
+               Array.isArray(sc2raw)  ? (()=>{const o={};sc2raw.forEach((v,i) =>{if(v!=null)o[String(i)]=v;});return o;})() : {};
+  const kt2  = (kt2raw  && typeof kt2raw ==='object' && !Array.isArray(kt2raw))  ? kt2raw  : {};
 
   let rUpd=0,tUpd=0;
 
