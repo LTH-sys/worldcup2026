@@ -51,6 +51,12 @@ const EN_TO_VN = {
   "uruguay":"Uruguay","paraguay":"Paraguay","jordan":"Jordan","algeria":"Algeria",
   "portugal":"Portugal","uzbekistan":"Uzbekistan","colombia":"Colombia","mexico":"Mexico",
   "argentina":"Argentina","brazil":"Brazil",
+  // Extra aliases from API variations
+  "united states":"Mỹ","türkiye":"Thổ Nhĩ Kỳ",
+  "bosnia-herzegovina":"Bosnia & Herzegovina","bosnia herzegovina":"Bosnia & Herzegovina",
+  "cape verde islands":"Cabo Verde","cape verde":"Cabo Verde",
+  "congo dr":"CHDC Congo","dr congo":"CHDC Congo","congo, dr":"CHDC Congo",
+  "democratic republic of the congo":"CHDC Congo",
 };
 
 function vnNorm(vn){ return VN_MAP[vn] || normalize(vn); }
@@ -60,8 +66,19 @@ function isPlaceholder(name){
   return /Nhất|Nhì|Hạng|Thắng|Thua|bảng|trận|xuất sắc/i.test(name);
 }
 
+const API_ALIASES = {
+  "turkey":"turkiye",
+  "united states":"usa",
+  "bosnia herzegovina":"bosnia and herzegovina",
+  "cape verde islands":"cabo verde",
+  "congo dr":"dr congo",
+  "democratic republic of the congo":"dr congo",
+  "korea republic":"south korea",
+};
+
 function teamsMatch(apiName, vnName){
-  const a = normalize(apiName);
+  let a = normalize(apiName);
+  a = API_ALIASES[a] || a;
   const v = vnNorm(vnName);
   return a === v || a.includes(v) || v.includes(a) ||
          a.replace(/\s/g,"").includes(v.replace(/\s/g,"")) ||
